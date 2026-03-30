@@ -1,0 +1,213 @@
+---
+title: 'Components'
+description: 'Extending GameObjects with custom behaviour using the Component lifecycle: Start, Update, and End.'
+---
+
+Components are the primary way to attach reusable behaviour to a `GameObject`. Each component has three lifecycle methods that the engine calls automatically, and a back-reference to the object it is attached to.
+
+## Component lifecycle
+
+```
+First frame the object appears
+         │
+         ▼
+   Component.Start()    ← called once, then _INIT is set to false
+         │
+         ▼
+   Component.Update()   ← called every frame thereafter
+         │
+         ▼
+   (window closes)
+         │
+         ▼
+   Component.End()      ← called once on shutdown
+```
+
+### Start()
+
+`Start()` is called on the **first frame** the component is processed, not at construction time. This means the `GameObject` and the rest of the scene are fully initialized before `Start()` runs.
+
+```csharp
+public virtual void Start()
+{
+    _INIT = false;   // base implementation — always call base.Start()
+}
+```
+
+After `Start()` returns, `_INIT` is `false`. The engine checks `_INIT` each frame to decide whether to call `Start()` again; once it is `false`, only `Update()` is called.
+
+<Warning>
+Always call `base.Start()` at the end of your override. Failing to do so leaves `_INIT` as `true`, and `Start()` will be called again on every subsequent frame.
+</Warning>
+
+### Update()
+
+`Update()` is called every frame after `Start()` has run. This is where per-frame logic lives: movement, animation, input responses, and so on.
+
+```csharp
+public virtual void Update() { }
+```
+
+### End()
+
+`End()` is called once for every component on every `GameObject` when the window closes (`OnClosing`). Use it to release unmanaged resources, save state, or stop background threads.
+
+```csharp
+public virtual void End() { }
+```
+
+<Note>
+`End()` is not called when a `GameObject` is destroyed mid-game via `obj.Destroy()`. If you need teardown on destroy, call cleanup logic explicitly before calling `Destroy()`.
+</Note>
+
+## Component base class
+
+```csharp
+public class Component
+{
+    public GameObject obj;              // the owning GameObject
+    public bool _INIT { get; private set; } = true;
+
+    public virtual void Update() { }
+    public virtual void End()    { }
+    public virtual void Start()  { _INIT = false; }
+}
+```
+
+`obj` is set by `GameObject.AddComponent` before the first `Start()` call, so it is safe to reference `obj` inside `Start()`.
+
+## Creating a custom component
+
+Inherit from `Component` and override whichever lifecycle methods you need.
+
+```csharp
+public class Rotator : Component
+{
+    public float speed = 90f; // degrees per second
+
+    public override void Start()
+    {
+        // one-time setup
+        base.Start();
+    }
+
+    public override void Update()
+    {
+        // rotate around Y each frame — store frameTime externally or
+        // track it via a public field set by your GameLogic.Update()
+        obj.eulerRot.Y += speed * Window.fTime * Window.timeScale;
+    }
+
+    public override void End()
+    {
+        // cleanup if needed
+    }
+}
+```
+
+<Tip>
+Keep components focused on a single responsibility. A `Rotator` should only rotate; a `HealthComponent` should only track health. Compose behaviour by attaching multiple components.
+</Tip>
+
+## Attaching components to a GameObject
+
+```csharp
+var crate = GameObject.Primitives.Box();
+crate.AddComponent(new Rotator());
+```
+
+`AddComponent` sets `component.obj` to `crate` and returns the component. Cast the return value if you need to configure it after attachment:
+
+```csharp
+var rotator = (Rotator)crate.AddComponent(new Rotator());
+rotator.speed = 180f;
+```
+
+## Retrieving and removing components
+
+```csharp
+// get a reference to an attached component
+var rotator = (Rotator)crate.GetComponent<Rotator>();
+
+// remove it entirely
+crate.RemoveComponent<Rotator>();
+```
+
+`GetComponent` returns `null` when no matching component exists.
+
+## Practical example — a timed self-destruct component
+
+```csharp
+public class SelfDestruct : Component
+{
+    public float delay = 3f;  // seconds until destruction
+    private float _elapsed;
+
+    public override void Start()
+    {
+        _elapsed = 0f;
+        base.Start();
+    }
+
+    public override void Update()
+    {
+        _elapsed += Window.fTime * Window.timeScale;
+        if (_elapsed >= delay)
+        {
+            obj.Destroy();
+        }
+    }
+}
+```
+
+Attach it to any object that should disappear after a fixed time:
+
+```csharp
+var explosion = GameObject.Primitives.Sphere();
+explosion.position = new Vector3(0, 1, 0);
+var destruct = (SelfDestruct)explosion.AddComponent(new SelfDestruct());
+destruct.delay = 2f;
+```
+
+## Execution order within a frame
+
+For each active `GameObject`, the engine iterates its component list in order:
+
+1. If `_INIT` is `true` on a component, `Start()` is called and `_INIT` becomes `false`.
+2. `Update()` is called on the same component.
+3. Repeat for the next component.
+
+After all components on all objects have been updated, `gameLogic.Update()` runs.
+
+<AccordionGroup>
+  <Accordion title="Component execution order between objects">
+    Components are updated in the order their owning objects appear in `GameObject.objects`. Objects are appended to that list when constructed, so earlier-constructed objects update first.
+  </Accordion>
+  <Accordion title="Accessing other components from within a component">
+    Use `obj.GetComponent` to reach sibling components on the same object:
+
+    ```csharp
+    public override void Start()
+    {
+        var rotator = (Rotator)obj.GetComponent<Rotator>();
+        base.Start();
+    }
+    ```
+  </Accordion>
+  <Accordion title="Accessing other GameObjects from a component">
+    Use `GameObject.FindWithTag` or hold a direct reference you assign from outside:
+
+    ```csharp
+    public class Follower : Component
+    {
+        public GameObject target; // set from GameLogic.Start()
+
+        public override void Update()
+        {
+            if (target != null)
+                obj.position = target.position + new Vector3(0, 2, 0);
+        }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

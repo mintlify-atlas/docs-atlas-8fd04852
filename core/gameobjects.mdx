@@ -1,0 +1,214 @@
+---
+title: 'GameObjects'
+description: 'Creating, configuring, and managing GameObjects — the fundamental entity in every VainEngine scene.'
+---
+
+A `GameObject` is the base entity in VainEngine. Every visible object, collidable surface, and logical actor in the scene is a `GameObject`. Objects hold a transform, an optional mesh, an optional collider, and a list of components.
+
+## Creating a GameObject
+
+<Steps>
+  <Step title="Empty object">
+    Construct a `GameObject` directly. It starts at the world origin with no mesh or collider.
+
+    ```csharp
+    var obj = new GameObject();
+    ```
+  </Step>
+  <Step title="Tagged object">
+    Pass a string tag to the constructor. Tags are used to find objects by name at runtime.
+
+    ```csharp
+    var player = new GameObject("Player");
+    ```
+  </Step>
+  <Step title="Primitive objects">
+    Use the `GameObject.Primitives` factory for common shapes. Primitives come with a mesh and collider already attached.
+
+    ```csharp
+    var floor  = GameObject.Primitives.Plane();
+    var crate  = GameObject.Primitives.Box();
+    var ball   = GameObject.Primitives.Sphere();
+    var pawn   = GameObject.Primitives.Capsule();
+    ```
+
+    Pass a `float` to set a uniform scale at creation:
+
+    ```csharp
+    var bigBox = GameObject.Primitives.Box(3f);
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Every `GameObject` constructor automatically adds the new object to the static `GameObject.objects` list, which is iterated by the engine each frame.
+</Note>
+
+## Transform properties
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `position` | `Vector3` | `Vector3.Zero` | World-space position. |
+| `eulerRot` | `Vector3` | `Vector3.Zero` | Rotation in Euler angles (degrees). Used when `useMatrixInsteadOfEuler` is `false`. |
+| `rotation` | `Matrix4` | `Matrix4.Identity` | Explicit rotation matrix. Used when `useMatrixInsteadOfEuler` is `true`. |
+| `scale` | `float` | `1` | Uniform scale applied to the mesh. |
+| `useMatrixInsteadOfEuler` | `bool` | `false` | When `true`, the engine reads `rotation` instead of `eulerRot` for orientation. |
+
+```csharp
+var box = GameObject.Primitives.Box();
+box.position = new Vector3(0, 2, -5);
+box.eulerRot = new Vector3(0, 45, 0);  // rotate 45° around Y
+box.scale    = 2f;
+```
+
+<Tip>
+Prefer `eulerRot` for simple rotations. Switch to `useMatrixInsteadOfEuler = true` only when you need to compose rotations programmatically (e.g., billboard effects or skeletal transforms).
+</Tip>
+
+## Visibility and persistence
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `visible` | `bool` | `true` | When `false`, the mesh is not rendered but the object still updates. |
+| `dontDestroyOnSceneLoad` | `bool` | `false` | When `true`, the object survives `SceneManager.LoadScene()`. |
+
+```csharp
+// hide without destroying
+obj.visible = false;
+
+// persist the player across scene transitions
+player.dontDestroyOnSceneLoad = true;
+```
+
+## Tag lookup
+
+Find the first object in the scene that carries a given tag:
+
+```csharp
+var player = GameObject.FindWithTag("Player");
+if (player != null)
+{
+    // ...
+}
+```
+
+<Warning>
+`FindWithTag` iterates `GameObject.objects` linearly. Avoid calling it every frame in performance-sensitive code; cache the result instead.
+</Warning>
+
+## Destroying a GameObject
+
+```csharp
+obj.Destroy();
+```
+
+`Destroy` removes the object from `GameObject.objects`. The engine stops updating and rendering it immediately on the next frame. Objects marked `dontDestroyOnSceneLoad` are **not** exempt from manual `Destroy` calls.
+
+## Mesh and collider
+
+```csharp
+public Mesh viewMesh;
+public Collider collider;
+```
+
+`viewMesh` is the renderable geometry drawn each frame when `visible` is `true`. `collider` is the physics shape used by Jitter. Primitives created via `GameObject.Primitives` have both pre-assigned; plain `new GameObject()` instances have neither.
+
+```csharp
+var obj = new GameObject("Obstacle");
+obj.viewMesh = myCustomMesh;
+obj.collider = myCustomCollider;
+```
+
+## Components
+
+Components add behaviour to a `GameObject`. See [Components](/core/components) for the full lifecycle documentation.
+
+### Adding a component
+
+```csharp
+var spinner = new Rotator();  // Rotator inherits from Component
+obj.AddComponent(spinner);
+```
+
+`AddComponent` sets `component.obj` to the owning `GameObject` and returns the component for chaining.
+
+```csharp
+var spinner = (Rotator)obj.AddComponent(new Rotator());
+spinner.speed = 90f;
+```
+
+### Retrieving a component
+
+```csharp
+var spinner = (Rotator)obj.GetComponent<Rotator>();
+```
+
+Returns `null` if no component of that type is attached.
+
+### Removing a component
+
+```csharp
+obj.RemoveComponent<Rotator>();
+```
+
+Removes all components whose type matches the type parameter. See [Components](/core/components) for how to write custom component classes.
+
+## Primitives reference
+
+<CardGroup cols={2}>
+  <Card title="Plane" icon="square">
+    A flat horizontal quad. Useful for floors and terrain tiles.
+
+    ```csharp
+    GameObject.Primitives.Plane();
+    GameObject.Primitives.Plane(10f); // scaled
+    ```
+  </Card>
+  <Card title="Box" icon="box">
+    A unit cube with a box collider.
+
+    ```csharp
+    GameObject.Primitives.Box();
+    GameObject.Primitives.Box(2f);
+    ```
+  </Card>
+  <Card title="Sphere" icon="circle">
+    A sphere mesh with a sphere collider.
+
+    ```csharp
+    GameObject.Primitives.Sphere();
+    GameObject.Primitives.Sphere(0.5f);
+    ```
+  </Card>
+  <Card title="Capsule" icon="shapes">
+    A capsule shape, suitable for character controllers.
+
+    ```csharp
+    GameObject.Primitives.Capsule();
+    GameObject.Primitives.Capsule(1f);
+    ```
+  </Card>
+</CardGroup>
+
+## Static object list
+
+All live objects are stored in:
+
+```csharp
+public static List<GameObject> objects = new List<GameObject>();
+```
+
+You can iterate it directly, but prefer `FindWithTag` or component references to avoid tight coupling to the global list.
+
+<AccordionGroup>
+  <Accordion title="Modifying objects during iteration">
+    The engine iterates `GameObject.objects` inside `OnUpdateFrame`. Calling `Destroy()` on an object while inside `Update()` is safe because the engine processes the removal before the next frame begins.
+  </Accordion>
+  <Accordion title="Physics world">
+    `Window.world` is the Jitter physics `World` instance. Colliders on GameObjects are registered there. You can access it statically:
+
+    ```csharp
+    var world = Window.world;
+    ```
+  </Accordion>
+</AccordionGroup>

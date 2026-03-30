@@ -1,0 +1,215 @@
+---
+title: 'Physics and colliders'
+description: "Attach collision shapes to GameObjects using the Collider class and VainEngine's Jitter physics integration."
+keywords: ['physics', 'collider', 'rigidbody', 'jitter', 'collision', 'boxshape', 'capsuleshape', 'sphereshape']
+---
+
+VainEngine uses [Jitter Physics](https://github.com/mattleibow/jitterphysics) for 3D collision detection and rigid body simulation. The `Collider` class wraps Jitter's `RigidBody` and attaches it to a `GameObject`.
+
+## World setup
+
+The physics world is initialised once in `Window.OnLoad` and stepped every frame. You do not need to set this up yourself — it runs automatically.
+
+```csharp
+// Window.cs (engine internals — read-only reference)
+public static CollisionSystem collision = new CollisionSystemSAP();
+public static World world;
+public static float timeScale = 0.8f;
+
+// OnLoad:
+world = new World(collision);
+world.Gravity = new JVector(0, -150f, 0);
+collision.EnableSpeculativeContacts = true;
+
+// Per frame:
+world.Step((float)e.Time * (timeScale / 4), true);
+```
+
+<Note>
+`timeScale` defaults to `0.8f`. Lowering it slows all physics simulation; raising it speeds it up. The effective timestep passed to `world.Step` is `deltaTime * (timeScale / 4)`.
+</Note>
+
+## The Collider class
+
+`Collider` wraps a Jitter `RigidBody` and links it to a `GameObject`. All active colliders are tracked in the static `Collider.colliders` list.
+
+### Constructors
+
+<AccordionGroup>
+  <Accordion title="Collider(Shape, GameObject) — axis-aligned static body">
+    Creates a static collider with no rotation. The body is placed at the GameObject's world position.
+
+    ```csharp
+    public Collider(Shape s, GameObject connectedBody)
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `s` | `Shape` | Jitter collision shape (see [shapes](#collision-shapes) below). |
+    | `connectedBody` | `GameObject` | The scene object this collider belongs to. |
+  </Accordion>
+
+  <Accordion title="Collider(Shape, GameObject, Vector3) — static body with rotation">
+    Creates a static collider and applies an initial orientation. Useful for sloped or rotated geometry.
+
+    ```csharp
+    public Collider(Shape s, GameObject connectedBody, Vector3 rot)
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `s` | `Shape` | Jitter collision shape. |
+    | `connectedBody` | `GameObject` | The scene object this collider belongs to. |
+    | `rot` | `Vector3` | Euler rotation (X, Y, Z) applied to the rigid body orientation. |
+  </Accordion>
+</AccordionGroup>
+
+Both constructors set the following on the underlying `RigidBody`:
+
+- `AffectedByGravity = false`
+- `IsStatic = true`
+- Position synced to `connectedBody.position`
+
+<Warning>
+The Y axis is negated when syncing position to Jitter (`-connectedBody.position.Y`). This matches VainEngine's coordinate convention. Keep this in mind if you manually inspect `colliderbody.Position`.
+</Warning>
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `shape` | `Shape` | The Jitter collision shape assigned to this collider. |
+| `colliderbody` | `RigidBody` | The underlying Jitter rigid body. `null` after `Destroy()`. |
+| `body` | `GameObject` | The GameObject this collider is attached to. |
+| `normal` | `Vector3` | The last collision normal recorded for this collider. |
+
+### Destroy
+
+Call `Destroy()` to remove the collider from the physics world and the global list:
+
+```csharp
+collider.Destroy();
+```
+
+This sets both `colliderbody` and `shape` to `null`. Do not access those fields after calling `Destroy()`.
+
+---
+
+## Collision shapes
+
+VainEngine exposes three Jitter shapes for common geometry.
+
+<CardGroup cols={3}>
+  <Card title="BoxShape" icon="square">
+    Axis-aligned box defined by width, height, and depth.
+
+    ```csharp
+    new BoxShape(new JVector(w, h, d))
+    ```
+  </Card>
+  <Card title="CapsuleShape" icon="pill">
+    Vertical capsule — ideal for character controllers and pillars.
+
+    ```csharp
+    new CapsuleShape(height, radius)
+    ```
+  </Card>
+  <Card title="SphereShape" icon="circle">
+    Uniform sphere defined by a single radius.
+
+    ```csharp
+    new SphereShape(radius)
+    ```
+  </Card>
+</CardGroup>
+
+All shapes are passed directly to the `Collider` constructor.
+
+---
+
+## Static geometry examples
+
+<Steps>
+  <Step title="Create the GameObject">
+    Instantiate the scene object that will own the collider.
+
+    ```csharp
+    GameObject floor = new GameObject();
+    floor.position = new Vector3(0, 0, 0);
+    ```
+  </Step>
+  <Step title="Choose a shape">
+    Pick the shape that matches the visual mesh. For a flat floor, a wide, thin box works well.
+
+    ```csharp
+    BoxShape floorShape = new BoxShape(new JVector(20f, 0.5f, 20f));
+    ```
+  </Step>
+  <Step title="Attach the Collider">
+    Pass the shape and the owning GameObject to the constructor.
+
+    ```csharp
+    floor.collider = new Collider(floorShape, floor);
+    ```
+  </Step>
+</Steps>
+
+### Floor collider
+
+```csharp
+// Flat floor at y = 0, 20×0.5×20 units
+GameObject floor = new GameObject();
+floor.position = new Vector3(0, 0, 0);
+floor.collider = new Collider(new BoxShape(new JVector(20f, 0.5f, 20f)), floor);
+```
+
+### Wall collider (with rotation)
+
+```csharp
+// Angled ramp: rotate 30 degrees on the X axis
+GameObject ramp = new GameObject();
+ramp.position = new Vector3(0, 1f, 5f);
+float rot1 = 30f, rot2 = 0f;
+ramp.collider = new Collider(
+    new BoxShape(new JVector(4f, 0.3f, 6f)),
+    ramp,
+    new Vector3(rot1, rot2, 0)
+);
+```
+
+### Scene loader pattern
+
+When loading levels from data, VainEngine's `Scene.cs` creates colliders in a loop:
+
+```csharp
+// Scene.cs (engine internals — reference only)
+box.collider = new Collider(
+    new BoxShape(new JVector(float.Parse(b.scale))),
+    box,
+    new Vector3(rot1, rot2, 0)
+);
+```
+
+---
+
+## Static vs dynamic bodies
+
+All colliders created through the `Collider` class are **static** (`IsStatic = true`, `AffectedByGravity = false`). They act as immovable world geometry.
+
+For a moving physics body (e.g., a player or a projectile), use `FPSController` or create a `RigidBody` directly via the Jitter API and add it to `Window.world`.
+
+<Tip>
+Static bodies are zero-cost in the broad-phase solver. For large levels with many fixed obstacles, always use static colliders rather than kinematic rigid bodies.
+</Tip>
+
+---
+
+## Collision detection
+
+Speculative contacts are enabled globally:
+
+```csharp
+collision.EnableSpeculativeContacts = true;
+```
+
+This prevents fast-moving objects from tunnelling through thin geometry. To respond to collisions in your own code, subscribe to the Jitter world's collision event or use `FPSController.CollisionDetected` as a reference pattern.

@@ -1,80 +1,196 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick start"
+description: "Get a VainEngine game window running in under 5 minutes."
 ---
 
-## Get started in three steps
+This guide walks you from a blank C# project to a running game window with a 3D object on screen.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+- .NET SDK (6.0 or later recommended)
+- Visual Studio 2022 or JetBrains Rider
+- A reference to the VainEngine project (see [Project Setup](/project-setup))
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Create your game
 
-### Step 2: Deploy your changes
+<Steps>
+  <Step title="Add the using directive">
+    At the top of your main file (e.g. `Program.cs`), add:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```csharp Program.cs
+    using VainEngine;
+    using OpenTK.Mathematics;
+    ```
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Inherit from GameLogic">
+    Make your main class inherit from `GameLogic`. This gives VainEngine control over your `Start()` and `Update()` methods.
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```csharp Program.cs
+    class Program : GameLogic
+    {
+        // Your game code goes here
+    }
+    ```
+  </Step>
 
-### Step 3: Go live
+  <Step title="Create the window and run">
+    In your entry point (must **not** be static), create the window, set it up with your game class, and start the loop:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```csharp Program.cs
+    class Program : GameLogic
+    {
+        static void Main(string[] args)
+        {
+            // Create a 1000×720 window titled "My Game"
+            Window w = Window.Create(1000, 720, "My Game");
 
-## Next steps
+            // Pass an instance of your GameLogic class
+            w.Setup(new Program());
 
-Now that you have your docs running, explore these key features:
+            // Start the game loop
+            w.Run();
+        }
+    }
+    ```
 
-<CardGroup cols={2}>
+    <Warning>
+      `new Program()` must **not** be a static class. The engine calls `Start()` and `Update()` as instance methods.
+    </Warning>
+  </Step>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+  <Step title="Set up the camera">
+    Override `Start()` to configure the camera before the first frame renders. VainEngine uses a **flipped Y axis**, so `Camera.up` must point in the `-Y` direction.
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+    ```csharp Program.cs
+    class Program : GameLogic
+    {
+        public override void Start()
+        {
+            // Look forward from the origin
+            Camera.up = new Vector3(0, -1, 0);
+            Camera.pos = new Vector3(0, 0, 0);
+            Camera.euler = new Vector3(0, 0, 0);
+            Camera.fov = 75;
+        }
+    }
+    ```
+  </Step>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+  <Step title="Spawn a game object">
+    Create a `GameObject`, load a mesh from an OBJ file, and assign it. The object will appear in the scene immediately.
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+    ```csharp Program.cs
+    public override void Start()
+    {
+        Camera.up = new Vector3(0, -1, 0);
+        Camera.pos = new Vector3(0, 0, -5);
+        Camera.euler = new Vector3(0, 0, 0);
 
-</CardGroup>
+        // Use a built-in primitive
+        GameObject box = GameObject.Primitives.Box();
+        box.position = new Vector3(0, 0, 0);
+        box.scale = 1f;
+
+        // Or load your own OBJ from the Resources folder
+        // GameObject g = new GameObject();
+        // g.viewMesh = new Mesh(@"Resources\myModel.obj",
+        //     Texture.LoadFromFile(@"Resources\myTexture.png"));
+    }
+    ```
+
+    <Tip>
+      The `Resources` folder must be in your project output directory with all assets set to **Copy Always**. Built-in primitives (`plane.obj`, `box.obj`, `sphere.obj`, `capsule.obj`) and a default grid texture are included automatically.
+    </Tip>
+  </Step>
+
+  <Step title="Add per-frame logic">
+    Override `Update()` for code that runs every frame. Use `frameTime` (scaled delta time) for smooth movement.
+
+    ```csharp Program.cs
+    public override void Update()
+    {
+        // Rotate a box every frame
+        // box.eulerRot.Y += 45f * frameTime;
+
+        // Check keyboard input
+        if (keyboard.IsKeyDown(OpenTK.Windowing.GraphicsLibraryFramework.Keys.Escape))
+        {
+            // close logic here
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Window creation options
+
+```csharp
+// Default 800×600, title "VainEngine"
+Window w = Window.Create();
+
+// Custom size only
+Window w = Window.Create(1920, 1080);
+
+// Custom size and title
+Window w = Window.Create(1280, 720, "My Awesome Game");
+```
+
+## Mouse and window helpers
+
+```csharp
+w.GrabMouse();      // hide cursor and lock it to the window
+w.ReleaseMouse();   // show cursor and unlock it
+
+w.GoFullscreen();   // switch to fullscreen
+w.GoWindowed();     // switch back to windowed mode
+```
+
+## GameLogic fields reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `keyboard` | `KeyboardState` | Current keyboard state — use `IsKeyDown()`, `IsKeyPressed()` |
+| `mouse` | `MouseState` | Current mouse state — position, buttons, scroll |
+| `frameTime` | `float` | Delta time × `timeScale` — use for frame-rate-independent movement |
+| `time` | `float` | Total elapsed time in seconds |
+| `Size` | `Vector2i` | Current window size in pixels |
+
+## Complete minimal example
+
+```csharp Program.cs
+using VainEngine;
+using OpenTK.Mathematics;
+
+class Program : GameLogic
+{
+    GameObject box;
+
+    static void Main(string[] args)
+    {
+        Window w = Window.Create(1000, 720, "My Game");
+        w.Setup(new Program());
+        w.Run();
+    }
+
+    public override void Start()
+    {
+        Camera.up = new Vector3(0, -1, 0);
+        Camera.pos = new Vector3(0, 0, -5);
+        Camera.euler = new Vector3(0, 0, 0);
+        Camera.fov = 75;
+
+        box = GameObject.Primitives.Box();
+        box.position = Vector3.Zero;
+    }
+
+    public override void Update()
+    {
+        box.eulerRot += new Vector3(0, 30f * frameTime, 0);
+    }
+}
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+VainEngine uses a **vertically flipped Y axis**. Position `(1, 2, 3)` in Unity is `(1, -2, 3)` in VainEngine. See the [coordinate system reference](/reference/coordinate-system) for a full explanation.
 </Note>

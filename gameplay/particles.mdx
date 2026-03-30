@@ -1,0 +1,164 @@
+---
+title: 'Particle systems'
+description: 'Spawn and update billboarded particle effects using ParticleSystem and Particle.'
+keywords: ['particles', 'particle system', 'effects', 'vfx', 'explosion', 'smoke', 'spawn']
+---
+
+`ParticleSystem` emits a burst of `Particle` objects from a point in world space, each with randomised velocity, gravity, and scale decay. All active particle systems are tracked in the static `ParticleSystem.PSes` list.
+
+## Properties
+
+Configure a `ParticleSystem` before calling `Start`. All properties are public and can be changed between bursts.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `lifetime` | `float` | `1` | How long each particle lives, in seconds. |
+| `speed` | `float` | `0.5f` | Base movement speed. Final speed per particle is `speed * random`. |
+| `jitter` | `float` | `0` | Amount of random directional spread. `0` = perfectly directional, `1` = full hemisphere. |
+| `scale` | `float` | `0.1f` | Initial visual size of each particle. |
+| `sizeChange` | `float` | — | Rate at which scale shrinks each frame. Positive values make particles fade out. |
+| `gravity` | `float` | `0` | Downward force applied to each particle per frame. |
+| `gravityJitter` | `float` | `0` | Random variation on per-particle gravity. |
+| `amount` | `int` | — | Number of particles spawned per `Start` call. |
+| `tex` | `Texture` | — | Texture applied to every particle billboard. |
+| `particlesAlive` | `int` | — | Read-only count of particles still active this frame. |
+
+<Note>
+Particles use `Mesh.Meshes[0]` (the engine's built-in sphere mesh) as their visual. The `tex` property controls their appearance via texture.
+</Note>
+
+---
+
+## Methods
+
+### Start
+
+```csharp
+public void Start(Vector3 pos, Vector3 dir)
+```
+
+Destroys any particles still alive from the previous burst, then spawns `amount` new particles.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pos` | `Vector3` | World-space origin of the emission. |
+| `dir` | `Vector3` | Primary direction of travel. Normalise before passing. |
+
+Each particle's velocity is calculated as:
+
+```
+velocity = (dir + random_jitter * jitter) * speed * random
+```
+
+### Update
+
+```csharp
+public void Update(float frameTime)
+```
+
+Must be called every frame from `GameLogic.Update()`. Handles:
+
+- Moving each particle by its velocity
+- Applying drag: `velocity /= (1 + frameTime * 3)`
+- Applying per-particle gravity
+- Shrinking scale by `sizeChange` per frame
+- Removing particles that have exceeded `lifetime`
+
+---
+
+## Complete example: explosion effect
+
+```csharp
+public class GameLogic
+{
+    ParticleSystem explosion;
+
+    public void Start()
+    {
+        explosion = new ParticleSystem();
+        explosion.amount      = 40;
+        explosion.lifetime    = 0.8f;
+        explosion.speed       = 3.5f;
+        explosion.jitter      = 0.9f;   // near-omnidirectional burst
+        explosion.scale       = 0.15f;
+        explosion.sizeChange  = 0.12f;  // shrink quickly
+        explosion.gravity     = 2.5f;
+        explosion.gravityJitter = 1.0f;
+        explosion.tex         = Texture.LoadFromFile(@"Resources\smoke.png");
+    }
+
+    public void TriggerExplosion(Vector3 hitPoint)
+    {
+        // Burst upward-ish from the hit point
+        explosion.Start(hitPoint, new Vector3(0, 1f, 0));
+    }
+
+    public void Update(float frameTime)
+    {
+        explosion.Update(frameTime);
+    }
+}
+```
+
+---
+
+## Reusing a system
+
+`Start` destroys existing particles before spawning new ones, so a single `ParticleSystem` instance can be re-fired repeatedly:
+
+```csharp
+// Safe to call as many times as needed
+explosion.Start(newPosition, newDirection);
+```
+
+<Tip>
+For effects that fire at high frequency (gunshots, footsteps), pool multiple `ParticleSystem` instances rather than calling `Start` on the same one every frame — the destroy-then-spawn cycle has a one-frame gap.
+</Tip>
+
+---
+
+## Directional vs omnidirectional effects
+
+<AccordionGroup>
+  <Accordion title="Directional effect (muzzle flash, jet thruster)">
+    Set `jitter` low to keep particles tightly grouped around `dir`.
+
+    ```csharp
+    muzzleFlash.jitter = 0.15f;
+    muzzleFlash.Start(gunBarrelPos, Camera.front);
+    ```
+  </Accordion>
+
+  <Accordion title="Omnidirectional effect (explosion, shatter)">
+    Set `jitter` close to `1` to scatter particles in all directions. The `dir` vector matters less.
+
+    ```csharp
+    shatter.jitter = 1.0f;
+    shatter.Start(objectPos, Vector3.UnitY);
+    ```
+  </Accordion>
+
+  <Accordion title="Upward rising effect (smoke, sparks)">
+    Point `dir` straight up and use moderate `jitter` with gravity near zero.
+
+    ```csharp
+    smoke.gravity  = 0f;
+    smoke.jitter   = 0.3f;
+    smoke.lifetime = 2.5f;
+    smoke.Start(emitterPos, Vector3.UnitY);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Checking if a burst is finished
+
+Use `particlesAlive` to determine when a one-shot effect has completed:
+
+```csharp
+if (explosion.particlesAlive == 0)
+{
+    // All particles have expired — safe to hide the emitter or trigger the next event
+}
+```

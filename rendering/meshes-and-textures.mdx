@@ -1,0 +1,168 @@
+---
+title: 'Meshes and textures'
+description: 'Load OBJ meshes and textures, configure materials, and add objects to the scene.'
+keywords: ['mesh', 'texture', 'obj', 'material', 'emission', 'color', 'tint', 'resources']
+---
+
+`Mesh` is the primary way to display 3D geometry in VainEngine. A mesh loads geometry from an OBJ file and pairs it with a texture. Transform, color, and material properties are set directly on the instance.
+
+## Setting up the Resources folder
+
+OBJ and texture files must be available at runtime. Place them in a `Resources` folder inside your project and mark each file with **Copy Always** in its properties so the build system copies it to the output directory.
+
+<Steps>
+  <Step title="Create the Resources folder">
+    Add a folder named `Resources` to your project in your IDE.
+  </Step>
+  <Step title="Add your assets">
+    Copy your `.obj` geometry files and image textures into `Resources`.
+  </Step>
+  <Step title="Set Copy Always">
+    For each file, open its properties and set **Copy to Output Directory** to **Copy Always**.
+  </Step>
+</Steps>
+
+## Loading a mesh
+
+```csharp
+Mesh m = new Mesh(
+    @"Resources\yourObj.obj",
+    Texture.LoadFromFile(@"Resources\yourTexture.png")
+);
+```
+
+After creating the mesh, assign it to a game object's `viewMesh` field to add it to the scene:
+
+```csharp
+g.viewMesh = m;
+```
+
+## Constructors
+
+`Mesh` provides two constructors.
+
+### Uniform scale
+
+```csharp
+public Mesh(string path, Texture texture, float texScale = 1, bool useWorldPosAsTexCoord = false)
+```
+
+The mesh is scaled uniformly via the `scale` field after construction.
+
+### Per-axis scale
+
+```csharp
+public Mesh(string path, Texture texture, Vector3 scale, float texScale = 1, bool useWorldPosAsTexCoord = false)
+```
+
+Pass a `Vector3` to scale the mesh independently on each axis at load time.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `path` | `string` | required | Path to the `.obj` file. |
+| `texture` | `Texture` | required | Texture applied to the mesh surface. |
+| `scale` | `float` or `Vector3` | `1` | Uniform or per-axis scale applied at load time. |
+| `texScale` | `float` | `1` | Multiplier for UV texture coordinates. Values above 1 tile the texture. |
+| `useWorldPosAsTexCoord` | `bool` | `false` | Use the vertex's world position as UV coordinates instead of the mesh's baked UVs. Useful for terrain or triplanar-style mapping. |
+
+## Transform fields
+
+After construction, move and orient the mesh by writing to its public fields:
+
+```csharp
+m.position = new Vector3(0, -2, 5);   // world-space position (Y is flipped)
+m.euler    = new Vector3(0, 45, 0);   // rotation in degrees (pitch, yaw, roll)
+m.scale    = 1.5f;                    // uniform scale multiplier
+```
+
+<Note>
+VainEngine uses a flipped Y axis. A Y value of `-2` places the mesh 2 units above the ground plane as seen by the camera.
+</Note>
+
+## Loading textures
+
+```csharp
+Texture t = Texture.LoadFromFile(@"Resources\surface.png");
+```
+
+`Texture.LoadFromFile` accepts a file path and returns a `Texture` object. Pass it directly to a `Mesh` constructor or apply it later with `SetTexture`.
+
+## Changing the texture at runtime
+
+```csharp
+// Void version — sets texture, returns nothing
+m.SetTexture(t);
+
+// Fluent version — sets texture and returns the Mesh for chaining
+m.SetTextureMesh(t).position = new Vector3(0, 0, 5);
+```
+
+## Color tinting
+
+`Mesh.color` multiplies the texture color on every pixel. The default is white (no tint):
+
+```csharp
+m.color = Color4.Red;                             // solid red tint
+m.color = new Color4(1.0f, 0.8f, 0.6f, 1.0f);    // warm tint
+```
+
+Setting `color` to a dark value darkens the mesh without replacing the texture.
+
+## Emission
+
+`emission` controls how much light the mesh appears to emit independently of scene lighting. It is passed directly to the fragment shader.
+
+```csharp
+m.emission = 0.2f;   // default — slight self-illumination
+m.emission = 1.0f;   // fully lit regardless of light sources
+m.emission = 0.0f;   // no self-illumination
+```
+
+<Tip>
+Use a higher emission value for UI elements, glowing surfaces, or any mesh that should appear fully visible regardless of light placement.
+</Tip>
+
+## Data maps
+
+`SetMap` binds a texture to a specific material channel:
+
+```csharp
+public enum DataMapType { Emission, Roughness, Specular, Combined }
+
+m.SetMap(Mesh.DataMapType.Emission, Texture.LoadFromFile(@"Resources\emissionMap.png"));
+```
+
+| Map type | Effect |
+|---|---|
+| `Emission` | Per-pixel emission mask. Bright pixels glow; dark pixels do not. |
+| `Roughness` | Controls surface roughness per pixel. |
+| `Specular` | Controls specular intensity per pixel. |
+| `Combined` | Packs multiple channels into one texture. |
+
+## Complete example
+
+```csharp
+// Load mesh with tiled texture
+Mesh rock = new Mesh(
+    @"Resources\rock.obj",
+    Texture.LoadFromFile(@"Resources\rock_diffuse.png"),
+    texScale: 2.0f
+);
+
+// Position and orient
+rock.position = new Vector3(3, -1, 8);
+rock.euler    = new Vector3(0, 30, 0);
+rock.scale    = 2f;
+
+// Material properties
+rock.color    = Color4.White;
+rock.emission = 0.1f;
+
+// Optional emission map
+rock.SetMap(Mesh.DataMapType.Emission, Texture.LoadFromFile(@"Resources\rock_emission.png"));
+
+// Add to scene
+g.viewMesh = rock;
+```

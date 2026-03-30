@@ -1,0 +1,179 @@
+---
+title: 'Audio playback'
+description: 'Play sound effects and music using AudioPlaybackEngine and AudioClip from the VainEngine.Audio namespace.'
+keywords: ['audio', 'sound', 'music', 'wav', 'wasapi', 'naudio', 'audioclip', 'playback']
+---
+
+VainEngine's audio system is in the `VainEngine.Audio` namespace. It uses [NAudio](https://github.com/naudio/NAudio) with Windows WASAPI output and a mixing pipeline that lets multiple sounds play simultaneously.
+
+<Warning>
+Audio output uses WASAPI and is **Windows-only**. `AudioPlaybackEngine` will not initialise on macOS or Linux.
+</Warning>
+
+---
+
+## AudioPlaybackEngine
+
+`AudioPlaybackEngine` is a singleton that owns the output device and the mixer. Access it through `AudioPlaybackEngine.Instance`.
+
+```csharp
+using VainEngine.Audio;
+
+// The singleton is created automatically on first access
+AudioPlaybackEngine engine = AudioPlaybackEngine.Instance;
+```
+
+### Constructor (for reference)
+
+```csharp
+public AudioPlaybackEngine(int sampleRate = 44100, int channelCount = 2)
+```
+
+The `Instance` singleton is initialised with the defaults (44100 Hz, stereo). You rarely need to construct a second instance.
+
+### Disposal
+
+`AudioPlaybackEngine` implements `IDisposable`. The singleton is kept alive for the lifetime of the application. If you construct a custom instance, dispose it when you are done:
+
+```csharp
+customEngine.Dispose();
+```
+
+---
+
+## Playing sounds
+
+There are two overloads of `PlaySound`, suited to different use cases.
+
+<CardGroup cols={2}>
+  <Card title="Direct file playback" icon="file-audio">
+    Reads and decodes the file on every call. Simple, but not efficient for sounds played frequently.
+
+    ```csharp
+    AudioPlaybackEngine.Instance.PlaySound(
+        @"Resources\explosion.wav"
+    );
+    ```
+  </Card>
+  <Card title="Cached clip playback" icon="bolt">
+    Pre-loads audio data into an `AudioClip` once. Repeated plays read from memory — much cheaper for footsteps, gunshots, etc.
+
+    ```csharp
+    AudioClip clip = new AudioClip(@"Resources\footstep.wav", 1.0f);
+    AudioPlaybackEngine.Instance.PlaySound(clip);
+    ```
+  </Card>
+</CardGroup>
+
+### PlaySound(string)
+
+```csharp
+public void PlaySound(string fileName)
+```
+
+Opens the file at `fileName`, decodes it via `AudioFileReader`, and feeds it into the mixer via an `AutoDisposeFileReader` that cleans up automatically when playback ends.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `fileName` | `string` | Path to the audio file. Relative paths are resolved from the working directory. |
+
+### PlaySound(AudioClip)
+
+```csharp
+public void PlaySound(AudioClip sound)
+```
+
+Plays a pre-loaded `AudioClip` using `CachedSoundSampleProvider`. The same `AudioClip` can be passed repeatedly without re-reading the file.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sound` | `AudioClip` | A pre-loaded audio clip created with `new AudioClip(path, volume)`. |
+
+---
+
+## AudioClip
+
+`AudioClip` pre-loads an audio file into memory so it can be played multiple times without disk I/O.
+
+```csharp
+// Second argument is playback volume (0.0 = silent, 1.0 = full volume)
+AudioClip clip = new AudioClip(@"Resources\footstep.wav", 1.0f);
+```
+
+| Aspect | Detail |
+|--------|--------|
+| Constructor | `AudioClip(string audioFileName, float volume)` |
+| Storage | Audio data held in memory as a decoded float buffer. |
+| Backed by | `CachedSoundSampleProvider` for playback routing. |
+| Reuse | A single `AudioClip` instance can be played any number of times. |
+
+<Tip>
+Load all `AudioClip` instances during `GameLogic.Start()`. Loading clips at runtime (e.g., on every gunshot) will cause brief stalls due to file I/O and decoding.
+</Tip>
+
+---
+
+## Complete example
+
+```csharp
+using VainEngine.Audio;
+
+public class GameLogic
+{
+    AudioClip footstepClip;
+    AudioClip jumpClip;
+
+    public void Start()
+    {
+        // Pre-load clips once at startup
+        // Second argument is volume: 1.0 = full volume
+        footstepClip = new AudioClip(@"Resources\footstep.wav", 1.0f);
+        jumpClip     = new AudioClip(@"Resources\jump.wav", 1.0f);
+    }
+
+    public void OnFootstep()
+    {
+        // Efficient: reads from memory
+        AudioPlaybackEngine.Instance.PlaySound(footstepClip);
+    }
+
+    public void OnJump()
+    {
+        AudioPlaybackEngine.Instance.PlaySound(jumpClip);
+    }
+
+    public void OnExplosion(Vector3 pos)
+    {
+        // One-off sound — direct file playback is fine here
+        AudioPlaybackEngine.Instance.PlaySound(@"Resources\explosion.wav");
+    }
+}
+```
+
+---
+
+## Choosing the right approach
+
+<AccordionGroup>
+  <Accordion title="When to use direct file playback">
+    Use `PlaySound(string)` for sounds that play rarely — cutscene stings, level completion jingles, or one-off environmental effects. The per-call overhead is acceptable when the sound fires once every several seconds.
+  </Accordion>
+
+  <Accordion title="When to use AudioClip">
+    Use `AudioClip` + `PlaySound(AudioClip)` for any sound that fires frequently: footsteps, weapon fire, UI clicks, hit effects. Pre-loading eliminates file I/O and decoding cost at playback time.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Supported formats
+
+`AudioPlaybackEngine` delegates file reading to NAudio's `AudioFileReader`, which supports:
+
+- WAV (PCM, IEEE float)
+- MP3
+- AIFF
+
+<Note>
+For best compatibility and lowest decode overhead, use 44100 Hz stereo WAV files. This matches the mixer's native format and avoids resampling.
+</Note>

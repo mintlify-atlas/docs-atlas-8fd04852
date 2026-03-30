@@ -1,0 +1,305 @@
+---
+title: 'VMath'
+description: 'Static math utility class for VainEngine. Wraps common System.Math operations with float-first overloads and game-specific helpers.'
+keywords: ['math', 'vmath', 'trigonometry', 'lerp', 'clamp', 'interpolation']
+---
+
+`VMath` is a static class providing math utilities used throughout VainEngine. All methods operate on `float` unless an `int` overload is noted.
+
+<Note>
+  VainEngine uses a **vertically flipped Y axis**. When using trigonometric or vector math to compute positions, remember that Y coordinates are negated relative to conventional right-hand coordinate systems. See the [Coordinate system](/reference/coordinate-system) reference.
+</Note>
+
+---
+
+## Trigonometry
+
+Standard trig functions. All angles are in **radians**.
+
+| Method | Signature | Description |
+|---|---|---|
+| `Sine` | `Sine(float f) → float` | sin(f) |
+| `Cosine` | `Cosine(float f) → float` | cos(f) |
+| `Tangent` | `Tangent(float f) → float` | tan(f) |
+| `ArcSine` | `ArcSine(float f) → float` | asin(f), result in [−π/2, π/2] |
+| `ArcCosine` | `ArcCosine(float f) → float` | acos(f), result in [0, π] |
+| `ArcTan` | `ArcTan(float f) → float` | atan(f), result in (−π/2, π/2) |
+| `ArcTan1` | `ArcTan1(float y, float x) → float` | atan2(y, x), full-circle angle from origin |
+
+```csharp
+// Rotate a direction vector by an angle
+float angle = VMath.ArcTan1(direction.Z, direction.X);
+float newAngle = angle + VMath.Sine(Global.totalTime) * 0.1f;
+```
+
+<Tip>
+  Use `ArcTan1(y, x)` (atan2) rather than `ArcTan` when you need a full 360° angle from a 2D vector — it handles all quadrants correctly.
+</Tip>
+
+---
+
+## Basic math
+
+<AccordionGroup>
+  <Accordion title="SqareRoot, Power, Exponent, Log">
+
+    <Note>`SqareRoot` is intentionally spelled this way in the source — match it exactly in your code.</Note>
+
+    | Method | Signature | Description |
+    |---|---|---|
+    | `SqareRoot` | `SqareRoot(float f) → float` | √f |
+    | `Power` | `Power(float f, float p) → float` | f^p |
+    | `Exponent` | `Exponent(float power) → float` | e^power |
+    | `Log` | `Log(float f, float p) → float` | log base p of f |
+    | `Log` | `Log(float f) → float` | natural log (base e) |
+    | `Log10` | `Log10(float f) → float` | log base 10 |
+
+    ```csharp
+    float distance = VMath.SqareRoot(dx * dx + dy * dy + dz * dz);
+    float scaled   = VMath.Power(distance, 2.5f);
+    ```
+
+  </Accordion>
+
+  <Accordion title="Absolute">
+
+    Two overloads — one for `float`, one for `int`.
+
+    <ParamField path="f" type="float">
+      Input value.
+    </ParamField>
+
+    ```csharp
+    float absVal  = VMath.Absolute(-3.14f);  // → 3.14
+    int   absInt  = VMath.Absolute(-7);      // → 7
+    ```
+
+  </Accordion>
+
+  <Accordion title="Minimum and Maximum">
+
+    Each has three overloads: `(float, float)`, `(params float[])`, `(int, int)`, and `(params int[])`.
+
+    ```csharp
+    float smallest = VMath.Minimum(a, b);
+    float largest  = VMath.Maximum(1f, 2f, 3f, 0.5f);  // → 3
+    int   minInt   = VMath.Minimum(10, 20);             // → 10
+    ```
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Rounding
+
+| Method | Signature | Returns | Description |
+|---|---|---|---|
+| `Ceiling` | `Ceiling(float f)` | `float` | Smallest integer ≥ f |
+| `Floor` | `Floor(float f)` | `float` | Largest integer ≤ f |
+| `Round` | `Round(float f)` | `float` | Round to nearest integer |
+| `CeilingToInteger` | `CeilingToInteger(float f)` | `int` | Ceiling as `int` |
+| `FloorToInteger` | `FloorToInteger(float f)` | `int` | Floor as `int` |
+| `RoundToInteger` | `RoundToInteger(float f)` | `int` | Round as `int` |
+| `Sign` | `Sign(float f)` | `float` | `1f` if f ≥ 0, else `-1f` |
+
+```csharp
+int tileX = VMath.FloorToInteger(worldPos.X / tileSize);
+int tileZ = VMath.FloorToInteger(worldPos.Z / tileSize);
+```
+
+<Note>
+  `Sign` returns `1f` for zero, not `0f`. This matches Unity's `Mathf.Sign` behavior.
+</Note>
+
+---
+
+## Clamping & interpolation
+
+### Clamp
+
+<ParamField path="value" type="float" required>
+  The value to constrain.
+</ParamField>
+<ParamField path="min" type="float" required>
+  Lower bound (inclusive).
+</ParamField>
+<ParamField path="max" type="float" required>
+  Upper bound (inclusive).
+</ParamField>
+
+```csharp
+float health   = VMath.Clamp(rawHealth, 0f, 100f);
+int   attempts = VMath.Clamp(count, 0, 5);
+float alpha    = VMath.Clamp01(rawAlpha);  // shorthand for Clamp(v, 0, 1)
+```
+
+---
+
+### Lerp
+
+Linear interpolation between two values. `t` is clamped to [0, 1].
+
+<ParamField path="a" type="float" required>
+  Start value (returned when t = 0).
+</ParamField>
+<ParamField path="b" type="float" required>
+  End value (returned when t = 1).
+</ParamField>
+<ParamField path="t" type="float" required>
+  Interpolation factor. Clamped to [0, 1].
+</ParamField>
+
+Two overloads are available:
+
+```csharp
+// Scalar lerp
+float speed = VMath.Lerp(minSpeed, maxSpeed, throttle);
+
+// Vector3 lerp
+Vector3 pos = VMath.Lerp(startPos, endPos, progress);
+```
+
+<Tip>
+  Use `LerpUnclamped` if you want `t` values outside [0, 1] (extrapolation). Use `LerpAngle` when interpolating rotation values to correctly handle the 0°/360° wrap boundary.
+</Tip>
+
+---
+
+### LerpAngle
+
+```csharp
+public static float LerpAngle(float a, float b, float t)
+```
+
+Interpolates between two angles (in degrees), taking the shortest path around the circle. Handles wrap-around at 0°/360°.
+
+```csharp
+float heading = VMath.LerpAngle(currentHeading, targetHeading, turnSpeed * Window.fTime);
+```
+
+---
+
+### MoveTowards / MoveTowardsAngle
+
+Move a value toward a target by at most `maxDelta` per call, without overshooting.
+
+<ParamField path="current" type="float" required>
+  The current value.
+</ParamField>
+<ParamField path="target" type="float" required>
+  The desired destination value.
+</ParamField>
+<ParamField path="maxDelta" type="float" required>
+  Maximum step size per call. Use `Window.fTime * speed` for frame-rate-independent movement.
+</ParamField>
+
+```csharp
+// Smoothly approach a target speed each frame
+currentSpeed = VMath.MoveTowards(currentSpeed, targetSpeed, acceleration * Window.fTime);
+
+// Rotate toward a target angle without overshoot
+euler.Y = VMath.MoveTowardsAngle(euler.Y, targetAngle, rotationSpeed * Window.fTime);
+```
+
+---
+
+### SmoothStep
+
+Cubic Hermite interpolation. Produces a smooth S-curve between `from` and `to`.
+
+```csharp
+public static float SmoothStep(float from, float to, float t)
+```
+
+`t` is clamped to [0, 1]. Returns values that ease in and ease out, unlike `Lerp` which is linear.
+
+```csharp
+// Fade a value in smoothly
+float opacity = VMath.SmoothStep(0f, 1f, fadeTimer / fadeDuration);
+```
+
+---
+
+### Gamma
+
+Applies a gamma curve to a value, useful for perceptual scaling of UI or audio.
+
+```csharp
+public static float Gamma(float value, float absmax, float gamma)
+```
+
+---
+
+## Angle & utility
+
+### DeltaAngle
+
+Returns the shortest signed angular difference between two angles (in degrees). Result is in (−180, 180].
+
+```csharp
+public static float DeltaAngle(float current, float target)
+```
+
+```csharp
+float diff = VMath.DeltaAngle(currentYaw, targetYaw);
+// diff is always the shortest rotation, e.g. DeltaAngle(350, 10) → 20, not -340
+```
+
+---
+
+### Approximately
+
+Returns `true` if two floats are close enough to be considered equal (epsilon comparison).
+
+```csharp
+if (VMath.Approximately(velocity.X, 0f))
+{
+    // treat as stationary
+}
+```
+
+---
+
+### Repeat
+
+```csharp
+public static float Repeat(float t, float length)
+```
+
+Wraps `t` into [0, `length`). Like the modulo operator but always returns a non-negative result.
+
+```csharp
+// Animate a UV offset that loops seamlessly
+float uvOffset = VMath.Repeat((float)Global.totalTime * scrollSpeed, 1f);
+```
+
+---
+
+### PingPong
+
+```csharp
+public static float PingPong(float t, float length)
+```
+
+Bounces `t` back and forth between 0 and `length`.
+
+```csharp
+// Float a platform up and down
+float yOffset = VMath.PingPong((float)Global.totalTime, 2f);  // 0 → 2 → 0 → 2 …
+```
+
+---
+
+### InverseLerp
+
+Returns the `t` value that produces `value` when lerping from `a` to `b`. The inverse of `Lerp`.
+
+```csharp
+public static float InverseLerp(float a, float b, float value)
+```
+
+```csharp
+// Convert a health value to a 0–1 fill fraction for a health bar
+float fillAmount = VMath.InverseLerp(0f, maxHealth, currentHealth);
+```

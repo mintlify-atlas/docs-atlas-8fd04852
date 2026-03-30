@@ -1,0 +1,161 @@
+---
+title: 'Camera'
+description: 'Configure the VainEngine camera for perspective, orthographic, and VR rendering.'
+keywords: ['camera', 'perspective', 'orthographic', 'vr', 'fov', 'euler', 'position']
+---
+
+The `Camera` static class controls all view and projection settings. Every field is public and can be written at any time during the game loop.
+
+<Warning>
+VainEngine uses a vertically flipped Y axis. A position of `(1, 2, 3)` in Unity is `(1, -2, 3)` in VainEngine. This affects `Camera.pos`, `Camera.up`, and any world-space coordinates you pass to the camera.
+</Warning>
+
+## Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `pos` | `Vector3` | `Vector3.Zero` | World-space camera position (Y is flipped). |
+| `euler` | `Vector3` | `Vector3.Zero` | Orientation in degrees: X = pitch, Y = yaw, Z = roll. |
+| `front` | `Vector3` | computed | Direction the camera faces. Derived from `euler` each frame — do not set manually. |
+| `up` | `Vector3` | — | Camera up vector. Use `(0, -1, 0)` for standard forward-facing. |
+| `fov` | `float` | `75` | Vertical field of view in degrees (perspective mode only). |
+| `nearClip` | `float` | `0.01f` | Near clip plane for perspective projection. |
+| `farClip` | `float` | `500f` | Far clip plane for perspective projection. |
+| `orthographic` | `bool` | `false` | Switch between perspective and orthographic projection. |
+| `orthographicScale` | `float` | `10` | World units visible vertically in orthographic mode. |
+| `orthoNearClip` | `float` | `-1f` | Near clip plane for orthographic projection. |
+| `orthoFarClip` | `float` | `200f` | Far clip plane for orthographic projection. |
+| `vr` | `bool` | `false` | Enable side-by-side VR rendering. |
+| `view` | `Matrix4` | computed | View matrix. Set automatically each frame from `pos`, `front`, and `up`. |
+| `projection` | `Matrix4` | computed | Projection matrix. Set automatically when camera mode changes. |
+
+<Note>
+`front` and the `view`/`projection` matrices are recomputed every frame by the engine. You do not need to update them manually.
+</Note>
+
+## Coordinate system
+
+VainEngine flips the Y axis relative to most 3D engines. When setting `Camera.pos`, negate the Y component of any external coordinate.
+
+The view matrix passes the negated Y position to `Matrix4.LookAt`:
+
+```csharp
+Camera.view = Matrix4.LookAt(
+    new Vector3(Camera.pos.X, -Camera.pos.Y, Camera.pos.Z),
+    new Vector3(Camera.pos.X, -Camera.pos.Y, Camera.pos.Z) + Camera.front,
+    Camera.up
+);
+```
+
+The engine handles this automatically — you always write to `Camera.pos` using the flipped convention (e.g., Y = `-2` to appear at height 2).
+
+## Euler angles
+
+`Camera.euler` stores rotation in degrees:
+
+- **X** — pitch (look up/down)
+- **Y** — yaw (look left/right)
+- **Z** — roll (tilt)
+
+The `front` vector is derived from pitch and yaw each frame:
+
+```csharp
+front.X = Math.Cos(ToRad(Camera.euler.X)) * Math.Cos(ToRad(-Camera.euler.Y));
+front.Y = Math.Sin(ToRad(Camera.euler.X));
+front.Z = Math.Cos(ToRad(Camera.euler.X)) * Math.Sin(ToRad(-Camera.euler.Y));
+```
+
+Roll (`euler.Z`) does not affect the `front` vector computation; it is available for shader or custom use.
+
+## Common setups
+
+### First-person view from the origin
+
+Look forward along the positive Z axis from the world origin:
+
+```csharp
+Camera.pos = Vector3.Zero;
+Camera.euler = Vector3.Zero;
+Camera.up = new Vector3(0, -1, 0);
+Camera.fov = 75;
+```
+
+### Orbiting a point
+
+Move the camera behind and above a target, looking toward it:
+
+```csharp
+Camera.pos = new Vector3(0, -5, -10);   // Y is flipped: -5 = 5 units above ground
+Camera.euler = new Vector3(20, 0, 0);   // 20° pitch downward
+Camera.up = new Vector3(0, -1, 0);
+```
+
+### Top-down orthographic
+
+Use orthographic projection for a top-down view. Increase `orthographicScale` to see more of the world:
+
+```csharp
+Camera.orthographic = true;
+Camera.orthographicScale = 20;          // 20 world units visible vertically
+Camera.pos = new Vector3(0, -10, 0);    // directly above (Y flipped)
+Camera.euler = new Vector3(90, 0, 0);   // pitch 90° to look straight down
+Camera.up = new Vector3(0, 0, 1);
+```
+
+The orthographic projection is computed as:
+
+```csharp
+Camera.projection = Matrix4.CreateOrthographic(
+    Camera.orthographicScale * (Size.X / (float)Size.Y),
+    Camera.orthographicScale,
+    Camera.orthoNearClip,
+    Camera.orthoFarClip
+);
+```
+
+### 2D sprite mode
+
+VainEngine has no native 2D renderer. Emulate 2D by using orthographic projection and placing textured planes as sprites in the scene:
+
+```csharp
+Camera.orthographic = true;
+Camera.orthographicScale = 10;
+Camera.pos = Vector3.Zero;
+Camera.euler = Vector3.Zero;
+Camera.up = new Vector3(0, -1, 0);
+```
+
+<Tip>
+With `orthographicScale = 10`, the visible vertical range is -5 to +5 world units (before the Y flip). Adjust `orthographicScale` to match the coordinate range you use for sprite placement.
+</Tip>
+
+## VR mode
+
+Setting `Camera.vr = true` renders the scene twice side by side — once for the left eye and once for the right eye — with an interpupillary distance (IPD) offset of 0.18 world units between the two viewpoints.
+
+```csharp
+Camera.vr = true;
+Camera.pos = new Vector3(0, 0, 0);
+Camera.euler = Vector3.Zero;
+Camera.up = new Vector3(0, -1, 0);
+```
+
+<Warning>
+VR mode renders the scene twice per frame, which doubles the draw call count. Profile your scene before enabling VR.
+</Warning>
+
+## Perspective projection defaults
+
+The engine initialises the perspective projection on startup with:
+
+```csharp
+Camera.projection = Matrix4.CreatePerspectiveFieldOfView(
+    MathHelper.DegreesToRadians(75f),
+    Size.X / (float)Size.Y,
+    0.02f,
+    500.0f
+);
+Camera.fov = 75;
+```
+
+The projection matrix is rebuilt automatically when the window is resized or when you toggle `Camera.orthographic`.

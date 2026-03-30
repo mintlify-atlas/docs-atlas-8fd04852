@@ -1,0 +1,200 @@
+---
+title: 'Scene management'
+description: 'Loading, reloading, and structuring scenes in VainEngine using SceneManager and JSON scene files.'
+---
+
+VainEngine scenes are JSON files that describe the initial state of a level: static boxes, lights, sky color, and a player spawn position. `SceneManager` handles loading them at runtime.
+
+## The Scene class
+
+```csharp
+public class Scene
+{
+    public string sceneData;  // raw JSON content
+    public string name;       // derived from the file path
+
+    public Scene(string path) { /* reads the JSON file from disk */ }
+}
+```
+
+Create a `Scene` by passing the path to a JSON file. The constructor reads and stores the file contents; nothing is spawned yet.
+
+```csharp
+var mainLevel = new Scene("assets/scenes/main.json");
+```
+
+## Loading a scene
+
+```csharp
+SceneManager.LoadScene(mainLevel);
+```
+
+`LoadScene` performs the following steps in order:
+
+<Steps>
+  <Step title="Destroy non-persistent objects">
+    All `GameObject` instances where `dontDestroyOnSceneLoad` is `false` are removed from the scene. All lights that are not marked persistent are also destroyed.
+  </Step>
+  <Step title="Deserialize the JSON">
+    The stored JSON is parsed into the scene graph: boxes, lights, player spawn position, and sky color.
+  </Step>
+  <Step title="Spawn boxes">
+    Each entry in `Boxes` is instantiated as a `Box` primitive at the given position, scale, and rotation with the specified RGB color applied to its mesh.
+  </Step>
+  <Step title="Spawn lights">
+    Each entry in `Lights` is created with the given world position, color, specular intensity, power, and distance.
+  </Step>
+  <Step title="Set sky color">
+    `Global.SkyColor` is called with the `skyR`, `skyG`, `skyB` values from the JSON, updating both the clear color and `Global.ambient`.
+  </Step>
+</Steps>
+
+<Warning>
+`LoadScene` destroys objects immediately. Any reference to a non-persistent `GameObject` you hold after `LoadScene` returns points to a removed object. Null-check or re-acquire references after a scene transition.
+</Warning>
+
+After loading, `SceneManager.current` is set to the new scene.
+
+```csharp
+var current = SceneManager.current; // the last loaded Scene
+```
+
+## Reloading the current scene
+
+```csharp
+SceneManager.Reload();
+```
+
+`Reload` is equivalent to `LoadScene(SceneManager.current)`. Use it to reset the level to its initial JSON state without needing a reference to the original `Scene` object.
+
+## Persisting objects across loads
+
+Set `dontDestroyOnSceneLoad = true` on any `GameObject` that must survive a scene transition, such as a player character or a persistent UI element:
+
+```csharp
+var player = new GameObject("Player");
+player.dontDestroyOnSceneLoad = true;
+```
+
+<Tip>
+Mark objects persistent in `GameLogic.Start()` before the first `LoadScene` call, or immediately after constructing them.
+</Tip>
+
+## Scene JSON format
+
+Scene files follow this structure:
+
+```json
+{
+  "Scene": {
+    "PlayerSpawnPos": { "x": "0", "y": "0", "z": "0" },
+    "Boxes": [
+      {
+        "x": "0", "y": "0", "z": "0",
+        "scale": "1",
+        "rot1": "0", "rot2": "0",
+        "r": "255", "g": "255", "b": "255"
+      }
+    ],
+    "Lights": [
+      {
+        "x": "0", "y": "5", "z": "0",
+        "r": "1", "g": "1", "b": "1",
+        "specular": "1",
+        "power": "10",
+        "distance": "20"
+      }
+    ],
+    "skyR": "135", "skyG": "206", "skyB": "235"
+  }
+}
+```
+
+### Field reference
+
+<AccordionGroup>
+  <Accordion title="PlayerSpawnPos">
+    World-space coordinates where the player should be placed when the scene loads. VainEngine writes this value into the JSON; your `GameLogic.Start()` (or a spawn component) is responsible for reading `SceneManager.current` and positioning the player accordingly.
+
+    ```json
+    "PlayerSpawnPos": { "x": "10", "y": "0", "z": "-5" }
+    ```
+  </Accordion>
+  <Accordion title="Boxes">
+    An array of static box objects. Each entry supports:
+
+    | Field | Description |
+    |---|---|
+    | `x`, `y`, `z` | World position |
+    | `scale` | Uniform scale |
+    | `rot1`, `rot2` | Rotation values (applied to the box's Euler angles) |
+    | `r`, `g`, `b` | Mesh color (0–255) |
+
+    ```json
+    "Boxes": [
+      { "x": "5", "y": "0", "z": "0", "scale": "2", "rot1": "0", "rot2": "45", "r": "200", "g": "100", "b": "50" }
+    ]
+    ```
+  </Accordion>
+  <Accordion title="Lights">
+    An array of point lights. Each entry supports:
+
+    | Field | Description |
+    |---|---|
+    | `x`, `y`, `z` | World position |
+    | `r`, `g`, `b` | Light color (0.0–1.0) |
+    | `specular` | Specular intensity multiplier |
+    | `power` | Light intensity |
+    | `distance` | Falloff radius |
+
+    ```json
+    "Lights": [
+      { "x": "0", "y": "8", "z": "0", "r": "1", "g": "0.9", "b": "0.8", "specular": "1", "power": "15", "distance": "30" }
+    ]
+    ```
+  </Accordion>
+  <Accordion title="Sky color">
+    `skyR`, `skyG`, `skyB` set the background clear color and `Global.ambient` (0–255 range). This maps to a `Color4` passed to `Global.SkyColor`.
+
+    ```json
+    "skyR": "135", "skyG": "206", "skyB": "235"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Typical usage pattern
+
+```csharp
+public class MyGame : GameLogic
+{
+    private static readonly Scene MainMenu  = new Scene("assets/scenes/menu.json");
+    private static readonly Scene Level1    = new Scene("assets/scenes/level1.json");
+
+    public override void Start()
+    {
+        // Mark the player persistent before loading any scene
+        var player = new GameObject("Player");
+        player.dontDestroyOnSceneLoad = true;
+
+        SceneManager.LoadScene(Level1);
+
+        // Read spawn position from loaded scene data if needed
+    }
+
+    public override void Update()
+    {
+        // Reload the current scene on R key
+        if (keyboard.IsKeyPressed(Keys.R))
+            SceneManager.Reload();
+    }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="GameObjects" icon="cube" href="/core/gameobjects">
+    Learn about `dontDestroyOnSceneLoad` and other GameObject properties.
+  </Card>
+  <Card title="Game loop" icon="arrows-rotate" href="/core/game-loop">
+    See how `Start()` and `Update()` relate to scene loading.
+  </Card>
+</CardGroup>

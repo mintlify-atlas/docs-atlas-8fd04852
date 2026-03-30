@@ -1,0 +1,162 @@
+---
+title: 'Lighting'
+description: 'Add point lights, configure ambient and directional lighting, and set up fog in VainEngine.'
+keywords: ['lighting', 'light', 'point light', 'ambient', 'fog', 'emission', 'sun', 'shadow']
+---
+
+VainEngine provides a straightforward lighting system: point lights, a directional sun, ambient color, per-mesh emission, and distance fog. There are no shadows.
+
+<Warning>
+The lighting system does not support shadow casting. Point lights are the only dynamic light type. For scenes that require realistic shadows or global illumination, bake a lightmap into your mesh textures using an external tool such as Blender.
+</Warning>
+
+## Point lights
+
+Create a `Light` instance to add a point light to the scene. The constructor automatically registers the light in `Light.lights`:
+
+```csharp
+Light lamp = new Light(
+    position: new Vector3(0, -2, 5),
+    color:    Color4.White,
+    specular: 1.0f,
+    power:    2.0f,
+    distance: 15.0f
+);
+```
+
+### Constructor parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `position` | `Vector3` | World-space position of the light (Y is flipped). |
+| `color` | `Color4` | Diffuse and ambient color of the light. |
+| `specular` | `float` | Specular highlight intensity. |
+| `power` | `float` | Overall brightness multiplier. |
+| `distance` | `float` | Radius beyond which the light has no effect (attenuation falloff). |
+
+### Runtime updates
+
+All fields are public and can be changed at any time:
+
+```csharp
+lamp.position = new Vector3(Camera.pos.X, Camera.pos.Y, Camera.pos.Z);
+lamp.color    = new Color4(1.0f, 0.5f, 0.2f, 1.0f);
+lamp.power    = 3.0f;
+```
+
+### Removing a light
+
+Call `Destroy()` to remove the light from the scene. This removes it from `Light.lights` so it stops being rendered:
+
+```csharp
+lamp.Destroy();
+```
+
+## Ambient light
+
+Set the ambient (sky) color with `Global.SkyColor`. This color is added to every surface regardless of light placement:
+
+```csharp
+Global.SkyColor(Color4.CornflowerBlue);
+Global.SkyColor(new Color4(0.1f, 0.1f, 0.15f, 1.0f));   // dark night sky
+```
+
+The shader uses a fixed `ambientPower` of `3f` and `lightPower` of `1f` internally.
+
+## Directional sun light
+
+`Window.sunPos` sets the direction of a global directional light. It behaves as a position vector pointing toward the light source rather than a true direction:
+
+```csharp
+Window.sunPos = new Vector3(1f, 1f, 1.0f);
+```
+
+<Note>
+`Window.sunPos` is a directional hint, not a point light. It does not attenuate with distance and does not cast shadows.
+</Note>
+
+## Per-mesh emission
+
+Each `Mesh` has an `emission` value that makes it appear self-lit, independent of all light sources:
+
+```csharp
+mesh.emission = 0.2f;   // default — slight base brightness
+mesh.emission = 1.0f;   // fully self-illuminated
+```
+
+The value is passed directly to the fragment shader as a uniform. A value of `0` means the mesh is lit only by scene lights; a value of `1` means it receives full brightness regardless of lights.
+
+You can also assign an emission map to control self-illumination per pixel:
+
+```csharp
+mesh.SetMap(Mesh.DataMapType.Emission, Texture.LoadFromFile(@"Resources\glowMask.png"));
+```
+
+## Fog
+
+Fog fades geometry to the sky color beyond a set distance range. The values are compile-time constants on `Window`:
+
+```csharp
+public const float FogStart = 80;   // distance at which fog begins
+public const float FogEnd   = 100;  // distance at which geometry is fully obscured
+```
+
+These cannot be changed at runtime without modifying the engine source. Geometry between `FogStart` and `FogEnd` is linearly blended toward the sky color. Geometry beyond `FogEnd` is not visible.
+
+<Warning>
+`FogStart` and `FogEnd` are `const` fields — they cannot be assigned at runtime. To change fog distances you must edit `Window.cs` and rebuild the engine.
+</Warning>
+
+<Tip>
+Set `FogEnd` close to `Camera.farClip` to hide geometry popping at the view distance limit.
+</Tip>
+
+## Shader internals
+
+The following values are hard-coded in the lighting shader and cannot be changed at runtime:
+
+| Uniform | Value | Description |
+|---|---|---|
+| `ambientPower` | `3f` | Multiplier applied to the ambient (sky) color. |
+| `lightPower` | `1f` | Multiplier applied to point light contribution. |
+| `shininess` | `2f` | Specular exponent for highlight sharpness. |
+
+Point lights pass per-light uniforms including `position`, `ambient`, `diffuse`, `specular`, `constant`, `linear`, `quadratic`, `power`, and `radius`.
+
+## Limitations
+
+- **No shadows.** Point lights illuminate all geometry within their radius regardless of occluders.
+- **Point lights only.** There is no spot light type. `Window.sunPos` is the only directional influence.
+- **Fixed shader constants.** `ambientPower`, `lightPower`, and `shininess` are baked into the shader.
+
+For scenes that require realistic shadows, use an external tool to bake lighting into textures and apply them as the mesh diffuse texture.
+
+## Example: basic three-point setup
+
+```csharp
+// Key light
+Light key = new Light(
+    new Vector3(3, -4, 2),
+    Color4.White,
+    specular: 1.5f,
+    power:    3.0f,
+    distance: 30.0f
+);
+
+// Fill light
+Light fill = new Light(
+    new Vector3(-3, -2, 2),
+    new Color4(0.6f, 0.7f, 1.0f, 1.0f),
+    specular: 0.5f,
+    power:    1.5f,
+    distance: 30.0f
+);
+
+// Ambient
+Global.SkyColor(new Color4(0.08f, 0.08f, 0.12f, 1.0f));
+
+// Sun direction
+Window.sunPos = new Vector3(1f, 1f, 1f);
+
+// Fog: FogStart=80, FogEnd=100 are const — no runtime change needed
+```

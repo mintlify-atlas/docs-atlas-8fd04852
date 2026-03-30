@@ -1,0 +1,229 @@
+---
+title: 'Graphics utilities'
+description: 'Reference for Graphics.DrawLine(), Global scene settings, and Window state variables used to control rendering, timing, and environment.'
+keywords: ['graphics', 'drawline', 'skycolor', 'fog', 'timescale', 'ambient', 'sun']
+---
+
+This page documents the rendering and scene-configuration utilities available as statics on `Graphics`, `Global`, and `Window`.
+
+---
+
+## Graphics.DrawLine
+
+Queues a 3D line to be rendered during the current frame.
+
+```csharp
+public static void DrawLine(Vector3 start, Vector3 end, Color4 color)
+```
+
+<ParamField path="start" type="Vector3" required>
+  World-space start position of the line.
+</ParamField>
+<ParamField path="end" type="Vector3" required>
+  World-space end position of the line.
+</ParamField>
+<ParamField path="color" type="Color4" required>
+  Line color. Alpha is ignored; only R, G, B are used.
+</ParamField>
+
+### How it works
+
+Internally, `DrawLine` appends an entry to `Graphics.lineQueue`. At the end of each frame, `Window.RenderScene()` consumes the queue using `Shaders/line.vert` and `line.frag`, then calls `Graphics.lineQueue.Clear()`.
+
+<Warning>
+  Lines are **not persistent**. The queue is cleared after every frame. You must call `DrawLine` every frame (e.g. inside `OnUpdateFrame`) for a line to remain visible.
+</Warning>
+
+### Line geometry
+
+Lines are rendered as thin triangle quads, **not** as GL line primitives. The rendered width is **0.005 world units** and is fixed — it does not scale with distance.
+
+```csharp
+// Draw a debug axis cross at a GameObject's position each frame
+public override void Update()
+{
+    Vector3 p = myObject.position;
+    Graphics.DrawLine(p, p + new Vector3(1, 0, 0), new Color4(1f, 0f, 0f, 1f)); // X = red
+    Graphics.DrawLine(p, p + new Vector3(0, 1, 0), new Color4(0f, 1f, 0f, 1f)); // Y = green
+    Graphics.DrawLine(p, p + new Vector3(0, 0, 1), new Color4(0f, 0f, 1f, 1f)); // Z = blue
+}
+```
+
+<Note>
+  VainEngine uses a **flipped Y axis**. If a line drawn from `(0,0,0)` to `(0,1,0)` appears to go downward, this is expected. See the [Coordinate system](/reference/coordinate-system) reference.
+</Note>
+
+### lineQueue
+
+```csharp
+public static List<Vector3[]> lineQueue
+```
+
+The backing store. Each entry is a `Vector3[3]` with the layout `[colorRGB, start, end]`, where `colorRGB.X/Y/Z` map to R/G/B respectively.
+
+You can read or manipulate this list directly if needed, but in most cases `DrawLine` is the intended API.
+
+---
+
+## Global
+
+Static scene-level settings in the `Global` class.
+
+### SkyColor
+
+```csharp
+public static void SkyColor(Color4 c)
+```
+
+Sets the background clear color **and** derives the ambient light value from it.
+
+- Sets `GL.ClearColor` to `c`.
+- Sets `Global.ambient` to `new Color4(c.R * 2, c.G * 2, c.B * 2, 1)` — the sky color doubled, giving a sky-tinted ambient fill.
+
+```csharp
+// Daytime
+Global.SkyColor(new Color4(0.53f, 0.81f, 0.98f, 1f));
+
+// Night
+Global.SkyColor(new Color4(0.02f, 0.02f, 0.08f, 1f));
+```
+
+<Tip>
+  Because `ambient` is derived from `SkyColor`, you get a consistent relationship between sky brightness and scene lighting for free. If you need a custom ambient that doesn't match the sky, set `Global.ambient` directly after calling `SkyColor`.
+</Tip>
+
+---
+
+### ambient
+
+```csharp
+public static Color4 ambient { get; private set; }
+```
+
+The current ambient light color applied to all lit surfaces. Set automatically by `SkyColor` (as 2× the sky color). Read-only via property; write by calling `SkyColor` or via reflection if a custom value is needed.
+
+---
+
+### totalTime
+
+```csharp
+public static double totalTime
+```
+
+Elapsed game time in seconds since startup. Updated each frame. Useful for time-based animations.
+
+```csharp
+// Oscillate a value at 1 Hz
+float wave = VMath.Sine((float)Global.totalTime * VMath.Cosine(1f) * 2f * 3.14159f);
+
+// Simpler — use as a raw time input
+float offset = VMath.PingPong((float)Global.totalTime * 0.5f, 3f);
+```
+
+<Note>
+  `Global.totalTime` is a raw accumulated time. It is **not** scaled by `Window.timeScale`. If you need scaled time, accumulate `Window.fTime * Window.timeScale` yourself.
+</Note>
+
+---
+
+## Window
+
+Static rendering and timing variables on the `Window` class.
+
+### sunPos
+
+```csharp
+public static Vector3 sunPos = new Vector3(1f, 1f, 1.0f)
+```
+
+Direction vector used as the sun/directional light source in the scene shaders. Not a world position — it is a direction from the origin toward the light.
+
+```csharp
+// Move the sun toward the horizon over time
+Window.sunPos = new Vector3(
+    VMath.Cosine((float)Global.totalTime * 0.1f),
+    VMath.Sine((float)Global.totalTime * 0.1f),
+    1.0f
+);
+```
+
+---
+
+### FogStart / FogEnd
+
+```csharp
+public const float FogStart = 80;
+public const float FogEnd   = 100;
+```
+
+Linear fog begins fading in at `FogStart` world units from the camera and reaches full opacity at `FogEnd`. These are compile-time constants and cannot be changed at runtime without modifying the source.
+
+The fog color matches the sky clear color set by `Global.SkyColor`.
+
+---
+
+### timeScale
+
+```csharp
+public static float timeScale = 0.8f
+```
+
+A global multiplier applied to physics updates and `Window.fTime`. A value of `1.0` is real-time; `0.5` is half speed; `0.0` pauses physics and scaled frame time.
+
+```csharp
+// Slow motion on hit
+Window.timeScale = 0.2f;
+
+// Restore normal speed
+Window.timeScale = 1.0f;
+```
+
+<Warning>
+  `timeScale` defaults to `0.8`, not `1.0`. If your physics or animations feel slightly slow compared to wall-clock time, this is why. Set it to `1.0` for real-time behavior.
+</Warning>
+
+---
+
+### fTime
+
+```csharp
+public static float fTime
+```
+
+The **raw** (unscaled) frame delta time in seconds. This is the time elapsed since the previous frame, before `timeScale` is applied.
+
+To get physics-correct scaled delta time, multiply manually:
+
+```csharp
+float scaledDelta = Window.fTime * Window.timeScale;
+
+// Frame-rate-independent movement using scaled time
+transform.position.X += velocity.X * scaledDelta;
+```
+
+<Note>
+  When moving objects in `OnUpdateFrame`, use `fTime * timeScale` if you want motion to respect slow-motion. Use `fTime` alone for effects that should always run at real time (e.g., UI animations).
+</Note>
+
+---
+
+### ScaleX / ScaleY
+
+```csharp
+public static float ScaleX;
+public static float ScaleY;
+```
+
+Current window dimensions in pixels. Updated when the window is resized. Use these to:
+
+- Compute UI element positions relative to the window size.
+- Calculate the aspect ratio.
+- Set up orthographic projections.
+
+```csharp
+float aspectRatio = Window.ScaleX / Window.ScaleY;
+
+// Center something on screen
+float centerX = Window.ScaleX * 0.5f;
+float centerY = Window.ScaleY * 0.5f;
+```

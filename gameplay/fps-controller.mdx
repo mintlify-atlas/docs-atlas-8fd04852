@@ -1,0 +1,210 @@
+---
+title: 'FPS controller'
+description: 'Add first-person movement, jumping, wall-running, and a smooth camera to your scene with FPSController.'
+keywords: ['fps', 'player', 'movement', 'jump', 'wall run', 'camera', 'physics', 'rigidbody']
+---
+
+`FPSController` is a ready-made first-person player controller built on top of Jitter physics. It handles ground movement, air strafing, jumping, wall detection, crouch, and camera follow in one class.
+
+## Constructor
+
+```csharp
+public FPSController(float height)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `height` | `float` | Player capsule height in world units. Controls the `CapsuleShape` used for the rigid body. |
+
+The constructor creates a `CapsuleShape`, initialises a `RigidBody` with low friction, and subscribes to the physics world's collision events automatically.
+
+```csharp
+// GameLogic.Start():
+FPSController player = new FPSController(1.0f);
+```
+
+---
+
+## Properties
+
+### Position and velocity
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `pos` | `Vector3` | World position, backed by `rb.Position`. Get or set to teleport the player. |
+| `velocity` | `Vector3` | Current linear velocity, backed by `rb.LinearVelocity`. |
+| `rb` | `RigidBody` | The underlying Jitter rigid body. |
+
+### State flags
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `grounded` | `bool` | `true` when the player is standing on a surface (collision normal Y > 0.8). Updated by `DoPhysics`. |
+| `wall` | `bool` | `true` when the player is in contact with a near-vertical surface. Enables wall-running. |
+| `jumping` | `bool` | `true` while the player is airborne after a jump. |
+
+### Camera
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `camOffsetFollow` | `Vector3` | read-only | Smooth camera offset that follows the body. Use this to position `Camera.pos`. |
+| `camOffset` | `Vector3` | read-only | Instantaneous camera offset (no smoothing). |
+| `camImpact` | `float` | read/write | Landing impact camera shake value. Applied as a Y offset. |
+| `height` | `float` | read/write | Additional Y offset applied to the camera (used for crouch). |
+
+### Debug
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `debugMode` | `bool` | When `true`, enables a free-fly no-clip camera. Toggle with **F** if `debugAllowed` is `true`. |
+| `debugAllowed` | `bool` | Must be `true` for the player to toggle `debugMode` at runtime. |
+
+---
+
+## Movement parameters
+
+These values are private in source but documented here for tuning reference. To change them, modify `FPSController.cs` directly.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `airMovement` | `1.5f` | Acceleration multiplier while airborne. |
+| `gndMovement` | `6f` | Acceleration multiplier while grounded. |
+| `jumpPower` | `16f` | Upward impulse applied on jump. |
+| `wallJumpPower` | `18f` | Impulse applied when jumping off a wall. |
+
+---
+
+## Per-frame methods
+
+Both methods must be called every frame inside `GameLogic.Update()`.
+
+### DoPhysics
+
+```csharp
+public void DoPhysics(float ftime)
+```
+
+Syncs the player's position from the rigid body, updates `grounded` and `wall` states, and applies camera tilt during wall-runs. Call this **before** `Movement`.
+
+### Movement
+
+```csharp
+public void Movement(KeyboardState keyboard, MouseState mouse, float frameTime)
+```
+
+Reads input and applies forces/impulses to the rigid body.
+
+| Input | Action |
+|-------|--------|
+| W / A / S / D | Walk in the camera-relative direction |
+| Space | Jump (or wall-jump when `wall` is `true`) |
+| Left Control / Left Shift | Crouch |
+| Mouse | Rotate camera (pitch clamped to ±85°) |
+| F (requires `debugAllowed`) | Toggle `debugMode` free-fly camera |
+
+<Note>
+`Camera.euler` pitch is hard-clamped to ±85 degrees to prevent the camera from flipping over.
+</Note>
+
+---
+
+## Applying forces
+
+Use these methods to push the player programmatically (e.g., explosions, conveyor belts):
+
+```csharp
+// Continuous force — good for persistent effects like wind
+public void AddAcceleration(Vector3 acc)
+
+// Single-frame impulse — good for explosions or knockback
+public void AddAccelerationImpulse(Vector3 acc, float impulse)
+```
+
+```csharp
+// Knock the player upward and backward on hit
+player.AddAccelerationImpulse(new Vector3(0, 1f, -1f), 25f);
+```
+
+---
+
+## Camera setup
+
+Position `Camera.pos` every frame using `camOffsetFollow` for smooth interpolated movement:
+
+```csharp
+Camera.pos = player.pos + player.camOffsetFollow + new Vector3(0, player.height, 0);
+```
+
+- `camOffsetFollow` — smoothed over time, eliminates jitter from physics steps
+- `player.height` — changes during crouch; animates the camera down smoothly
+
+---
+
+## Complete usage example
+
+```csharp
+public class MyGame : GameLogic
+{
+    FPSController player;
+
+    public override void Start()
+    {
+        player = new FPSController(1.0f);
+        player.pos = new Vector3(0, 5f, 0); // spawn above the floor
+
+        // Allow the developer to toggle free-fly with F
+        player.debugAllowed = true;
+    }
+
+    public override void Update()
+    {
+        // 1. Sync physics state
+        player.DoPhysics(frameTime);
+
+        // 2. Process input — pass GameLogic's keyboard/mouse snapshots
+        player.Movement(keyboard, mouse, frameTime);
+
+        // 3. Update camera
+        Camera.pos = player.pos
+            + player.camOffsetFollow
+            + new Vector3(0, player.height, 0);
+    }
+}
+```
+
+---
+
+## Collision callback
+
+`FPSController` subscribes to Jitter's collision event internally. The callback logic sets state flags used by `Movement`:
+
+```csharp
+public void CollisionDetected(
+    RigidBody body1, RigidBody body2,
+    JVector point1, JVector point2,
+    JVector normal, float penetration)
+{
+    // Landing: normal pointing mostly up → grounded
+    if (normal.Y > 0.8f)
+        grounded = true;
+
+    // Wall contact: near-horizontal normal → wall-run eligible
+    // (handled internally)
+}
+```
+
+You do not need to call this method yourself — the engine subscribes it during construction.
+
+<Tip>
+If your level geometry uses very thin colliders, enable `collision.EnableSpeculativeContacts = true` in `Window.cs` to prevent the player from passing through at high speeds. This is already on by default.
+</Tip>
+
+---
+
+## Wall-running
+
+Wall-running activates automatically when the player moves into a near-vertical surface while airborne. The `wall` flag is set by `CollisionDetected` and cleared each frame by `DoPhysics`. No additional setup is required.
+
+<Warning>
+Wall-running requires the wall surface to have a `Collider` registered in `Collider.colliders`. Surfaces added directly to `Window.world` without using the `Collider` class will not trigger wall detection.
+</Warning>

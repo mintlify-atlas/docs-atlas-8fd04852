@@ -1,0 +1,71 @@
+---
+title: "Welcome to VainEngine"
+description: "A C# 3D game engine built on OpenTK and OpenGL for small to medium games."
+---
+
+VainEngine is a lightweight 3D game engine written in C#, built on top of OpenTK and OpenGL. It provides a familiar **GameObject-Component architecture**, physics via the Jitter engine, audio playback, UI rendering, and scene management — everything you need to build small to medium-sized 3D games.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get a game window running in under 5 minutes
+  </Card>
+  <Card title="Project Setup" icon="folder-open" href="/project-setup">
+    Configure your C# project to use VainEngine
+  </Card>
+  <Card title="GameObjects" icon="cube" href="/core/gameobjects">
+    Create and manage objects in the game world
+  </Card>
+  <Card title="Rendering" icon="eye" href="/rendering/camera">
+    Cameras, meshes, lighting, and the render pipeline
+  </Card>
+  <Card title="Physics" icon="atom" href="/gameplay/physics-colliders">
+    Colliders, rigid bodies, and the Jitter physics world
+  </Card>
+  <Card title="API Reference" icon="book" href="/reference/vmath">
+    Full reference for math utilities and graphics helpers
+  </Card>
+</CardGroup>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="GameObject-Component system" icon="puzzle-piece">
+    Attach reusable components to any game object, inspired by Unity's familiar pattern.
+  </Card>
+  <Card title="3D rendering with OpenGL" icon="display">
+    Perspective and orthographic cameras, OBJ mesh loading, textures, normal maps, and emission maps.
+  </Card>
+  <Card title="Jitter physics" icon="bolt">
+    Integrated rigid body physics with box and capsule colliders, gravity, and collision events.
+  </Card>
+  <Card title="Built-in FPS controller" icon="person-walking">
+    Ready-to-use first-person controller with wall-running, crouching, jumping, and debug mode.
+  </Card>
+  <Card title="Audio playback" icon="music">
+    NAudio-based audio engine supporting file playback and cached sound clips.
+  </Card>
+  <Card title="Scene management" icon="film">
+    JSON-based scene files with runtime loading and hot-reload support.
+  </Card>
+</CardGroup>
+
+## Getting started
+
+<Steps>
+  <Step title="Add VainEngine to your project">
+    Reference the `VainEngine.csproj` in your solution or add a project reference from Visual Studio.
+  </Step>
+  <Step title="Create your game class">
+    Inherit from `GameLogic` and override `Start()` and `Update()` to write game code.
+  </Step>
+  <Step title="Create and run the window">
+    Use `Window.Create()` to open a game window, call `Setup()` with your game class, then `Run()`.
+  </Step>
+  <Step title="Build your scene">
+    Spawn `GameObject` instances, assign meshes, add components, and configure the camera.
+  </Step>
+</Steps>
+
+<Note>
+VainEngine uses a **vertically flipped Y axis** compared to engines like Unity. A position of `(1, 2, 3)` in Unity is `(1, -2, 3)` in VainEngine. See the [coordinate system reference](/reference/coordinate-system) for details.
+</Note>

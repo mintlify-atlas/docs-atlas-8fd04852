@@ -1,0 +1,187 @@
+---
+title: "Project setup"
+description: "Configure a C# project to use VainEngine as a library reference."
+---
+
+VainEngine is distributed as a C# class library project. You add it to your game by referencing `VainEngine.csproj` directly in your solution.
+
+## Solution structure
+
+The repository contains a single solution file with the engine library inside:
+
+```
+GameEngine.sln
+GameEngine/
+└── VainEngine.csproj   ← the engine library
+```
+
+Your game project lives alongside the engine in the same solution, or in a separate solution that references the engine project by path.
+
+## Add VainEngine to your project
+
+<Steps>
+  <Step title="Open or create your solution">
+    Open `GameEngine.sln` in Visual Studio, Rider, or your preferred IDE. If you are starting a new game, add a new **Console App (.NET)** project to the solution.
+
+    <Tip>
+      Target `netcoreapp3.1` to match the engine's target framework. Using a different framework version may cause build errors.
+    </Tip>
+  </Step>
+
+  <Step title="Add a project reference">
+    In your game project, add a reference to `GameEngine/VainEngine.csproj`.
+
+    <CodeGroup>
+
+    ```xml YourGame.csproj (manual edit)
+    <ItemGroup>
+      <ProjectReference Include="..\GameEngine\VainEngine.csproj" />
+    </ItemGroup>
+    ```
+
+    ```bash Visual Studio
+    Right-click your project → Add → Project Reference → select VainEngine
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Set the target framework">
+    Make sure your game project targets `netcoreapp3.1`:
+
+    ```xml YourGame.csproj
+    <PropertyGroup>
+      <TargetFramework>netcoreapp3.1</TargetFramework>
+      <OutputType>Exe</OutputType>
+      <Nullable>disable</Nullable>
+    </PropertyGroup>
+    ```
+  </Step>
+
+  <Step title="Create the Resources folder">
+    Create a `Resources` folder in your game project. All assets (models, textures, audio) must be placed here with **Copy Always** set so they appear next to the executable at runtime.
+
+    Add assets to your `.csproj` like this:
+
+    ```xml YourGame.csproj
+    <ItemGroup>
+      <None Update="Resources\myModel.obj">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\myTexture.png">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+    ```
+
+    <Note>
+      The engine's built-in primitives and textures (`box.obj`, `plane.obj`, `sphere.obj`, `capsule.obj`, `grid.png`, `white.png`, `TextAtlas.png`) are bundled with `VainEngine.csproj` and copied to the output directory automatically. You do not need to add them to your project manually.
+    </Note>
+  </Step>
+</Steps>
+
+## Dependencies
+
+VainEngine pulls in the following NuGet packages automatically via `VainEngine.csproj`. You do not need to add these to your game project separately.
+
+| Package | Version | Purpose |
+|---|---|---|
+| `OpenTK` | 4.6.7 | Window management, OpenGL bindings, math types |
+| `ImGui.NET` | 1.78.0 | Immediate-mode debug UI |
+| `JitterPhysics` | 0.2.0.20 | Rigid body physics simulation |
+| `NAudio` | 2.0.1 | Audio file playback |
+| `NAudio.Vorbis` | 1.5.0 | OGG/Vorbis audio support |
+| `Newtonsoft.Json` | 13.0.1 | Scene serialization |
+| `System.Drawing.Common` | 6.0.0 | Screenshot and image utilities |
+| `DocumentFormat.OpenXml` | 2.14.0 | Document format support |
+
+## Minimal project file
+
+A complete `.csproj` for a game project that references VainEngine:
+
+```xml YourGame.csproj
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameEngine\VainEngine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Resources\myModel.obj">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\myTexture.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
+```
+
+## Built-in resources
+
+The following files are bundled with the engine and available in `Resources\` at runtime without any setup:
+
+| File | Type | Description |
+|---|---|---|
+| `plane.obj` | Primitive | Flat quad mesh |
+| `box.obj` | Primitive | Unit cube mesh |
+| `sphere.obj` | Primitive | Sphere mesh |
+| `capsule.obj` | Primitive | Capsule mesh |
+| `grid.png` | Texture | Debug grid texture |
+| `white.png` | Texture | Solid white texture |
+| `TextAtlas.png` | Texture | Font atlas for `UIText` rendering |
+
+Reference these directly in your code without copying them to your project:
+
+```csharp
+Mesh floor = new Mesh(@"Resources\plane.obj", Texture.LoadFromFile(@"Resources\grid.png"));
+```
+
+## Verify your setup
+
+Once the project reference is added and the solution builds, confirm everything works with a minimal program:
+
+```csharp Program.cs
+using VainEngine;
+
+class Program : GameLogic
+{
+    public override void Start()
+    {
+        Camera.up = new OpenTK.Mathematics.Vector3(0, -1, 0);
+        Camera.pos = new OpenTK.Mathematics.Vector3(0, 0, 0);
+        Camera.euler = new OpenTK.Mathematics.Vector3(0, 0, 0);
+    }
+
+    static void Main(string[] args)
+    {
+        Window w = Window.Create(1000, 720, "My Game");
+        w.Setup(new Program());
+        w.Run();
+    }
+}
+```
+
+Build and run. A game window should open with a blank scene. If you see a window, VainEngine is configured correctly.
+
+<Note>
+  The window starts with the mouse grabbed and cursor hidden by default. Press `Alt+F4` or close the window title bar to exit during development.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Create your first game window and render a mesh
+  </Card>
+  <Card title="GameObjects" icon="cube" href="/core/gameobjects">
+    Spawn and manage objects in the scene
+  </Card>
+</CardGroup>

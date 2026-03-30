@@ -1,0 +1,205 @@
+---
+title: 'Coordinate system'
+description: "VainEngine uses a vertically flipped Y axis. This page explains what that means, why it exists, and how to work with it correctly across cameras, meshes, physics, and 2D/orthographic mode."
+keywords: ['coordinate system', 'y axis', 'flip', 'camera', 'physics', 'euler', 'unity migration']
+---
+
+VainEngine flips the Y axis relative to most other 3D engines. This is a foundational characteristic that affects every part of the engine: cameras, mesh transforms, physics bodies, and rendering.
+
+<Warning>
+  This is not a bug. The flip is intentional (though it originated as an early development decision) and is baked into the view matrix, physics integration, and mesh rotation pipeline. Do not attempt to work around it with ad-hoc negation in one subsystem only — you must apply it consistently.
+</Warning>
+
+---
+
+## The flip
+
+In VainEngine, **Y is negated** relative to a conventional right-hand coordinate system:
+
+| Convention | Position |
+|---|---|
+| Standard / Unity | (x, y, z) |
+| VainEngine | (x, **−y**, z) |
+
+To place an object at what would be `(1, 2, 3)` in Unity, use `(1, -2, 3)` in VainEngine. Positive Y moves *downward* in world space; negative Y moves *upward*.
+
+```csharp
+// Unity: place an object 5 units above the origin
+// transform.position = new Vector3(0, 5, 0);
+
+// VainEngine equivalent:
+gameObject.position = new Vector3(0, -5, 0);
+```
+
+---
+
+## Why it exists
+
+The flip originates from an early implementation of the view matrix. When computing the camera look-at, the Y component of the camera position is negated:
+
+```csharp
+// From Window.cs (simplified)
+Matrix4.LookAt(
+    new Vector3(Camera.pos.X, -Camera.pos.Y, Camera.pos.Z),  // eye position
+    target,
+    Camera.up
+);
+```
+
+Because this negation was applied at the view-matrix level rather than isolated to the camera, all world-space coordinates are implicitly in a Y-flipped space. The physics engine (Jitter) and mesh transforms follow the same convention to stay consistent.
+
+---
+
+## Camera
+
+### Position
+
+Camera position is stored in the flipped coordinate space. To move the camera up in screen-space, decrease `Camera.pos.Y` (make it more negative).
+
+```csharp
+// Move camera 10 units "up" in the scene
+Camera.pos = new Vector3(0, -10, 0);
+```
+
+### Up vector
+
+The camera's `up` vector must be `(0, -1, 0)` for a standard upright view — the opposite of Unity's `(0, 1, 0)`.
+
+```csharp
+Camera.up = new Vector3(0, -1, 0);  // standard upright view
+```
+
+Setting `Camera.up` to `(0, 1, 0)` will produce an upside-down view.
+
+### Euler angles
+
+Euler angle conventions:
+
+- **X** = pitch (up/down tilt)
+- **Y** = yaw (left/right rotation)
+
+These are computed with standard trigonometry in `OnUpdateFrame`. No additional flip is needed for the angles themselves.
+
+---
+
+## Mesh rotation
+
+Mesh rotation has a **180-degree baked-in offset** on the X axis. When constructing the rotation matrix for a mesh, the engine applies:
+
+```csharp
+Matrix4.CreateRotationX((float)MathHelper.DegreesToRadians(180 - euler.X))
+```
+
+This means an `euler.X` of `0` already applies a 180° rotation. Practically, this corrects the mesh orientation for the Y-flip in world space. When setting `euler.X` for your meshes:
+
+- `euler.X = 0` → mesh is upright (180° offset applied internally)
+- `euler.X = 180` → mesh is flipped (net rotation = 0°)
+
+```csharp
+// Standard upright mesh with no pitch
+myMesh.euler = new Vector3(0, yaw, 0);
+```
+
+---
+
+## Physics (Jitter)
+
+The Jitter physics library uses the same Y-flip. When setting a physics body's position from a game-object position (or vice versa), negate Y:
+
+```csharp
+// Set physics body position from world position
+colliderbody.Position = new JVector(pos.X, -pos.Y, pos.Z);
+
+// Read physics body position back into world space
+Vector3 worldPos = new Vector3(
+    colliderbody.Position.X,
+    -colliderbody.Position.Y,
+    colliderbody.Position.Z
+);
+```
+
+<Tip>
+  If physics objects appear to fall in the wrong direction, check two things: (1) the Y coordinate is negated when passed to Jitter, and (2) gravity is set to point in the correct direction. You can also work around the flip by setting gravity to a negative value — but negating Y coordinates is the consistent approach.
+</Tip>
+
+---
+
+## Positioning GameObjects
+
+When placing any object in the world, always negate the Y component of the position you intend visually.
+
+```csharp
+// Place an object at visual height 3 (i.e., 3 units above the ground plane)
+myObject.position = new Vector3(x, -3f, z);
+
+// Place on the ground (y = 0 visually)
+myObject.position = new Vector3(x, 0f, z);
+// Note: Y = 0 is unaffected — the ground plane is the same in both systems
+```
+
+---
+
+## Migrating positions from Unity
+
+Negate the Y component of every world-space position or direction vector when porting from Unity:
+
+| Unity | VainEngine |
+|---|---|
+| `new Vector3(1, 2, 3)` | `new Vector3(1, -2, 3)` |
+| `new Vector3(0, 1, 0)` (up) | `new Vector3(0, -1, 0)` |
+| `new Vector3(0, -9.8f, 0)` (gravity) | `new Vector3(0, 9.8f, 0)` |
+| `Camera.up = (0,1,0)` | `Camera.up = (0,-1,0)` |
+
+Rotations (Euler angles X/Y/Z) and the X/Z axes are unaffected.
+
+---
+
+## VR rendering
+
+VR rendering applies the same Y-flip. When constructing view matrices for each eye in VR mode, the Y component of the eye position is negated in the same way as the standard camera. No additional handling is required — if your scene works correctly in standard mode with the flip applied, it will render correctly in VR.
+
+---
+
+## 2D / orthographic mode
+
+<AccordionGroup>
+  <Accordion title="Setting up an orthographic projection">
+
+    In orthographic mode, the Y flip still applies. Screen-space "up" corresponds to negative Y in world space.
+
+    ```csharp
+    // Position a 2D sprite 100px from the top of the screen
+    sprite.position = new Vector3(Window.ScaleX * 0.5f, -(Window.ScaleY - 100f), 0f);
+    ```
+
+    When using an orthographic projection matrix, construct it so that the top of the screen maps to a negative Y value:
+
+    ```csharp
+    // Top = -ScaleY/2, Bottom = +ScaleY/2 (flipped)
+    Matrix4 ortho = Matrix4.CreateOrthographic(Window.ScaleX, -Window.ScaleY, -1f, 1f);
+    ```
+
+  </Accordion>
+
+  <Accordion title="Mouse input and screen coordinates">
+
+    Screen/mouse coordinates in most windowing APIs have Y increasing downward (origin at top-left). In VainEngine's flipped world space, this means screen Y and world Y are actually aligned in direction — both increase downward. When projecting a screen-space mouse position into world space, you typically do **not** need an additional Y negation beyond the standard unproject calculation.
+
+    Test this empirically in your project, as the exact behavior depends on how you set up your projection and view matrices for 2D.
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Quick reference
+
+| Context | Rule |
+|---|---|
+| World position | Negate Y: `(x, -y, z)` |
+| Camera position | Negate Y to move up |
+| Camera up vector | Use `(0, -1, 0)` |
+| Mesh euler.X | 0 = upright (180° offset baked in) |
+| Physics body position | Negate Y when reading/writing |
+| Gravity direction | Positive Y in Jitter = downward in screen space |
+| Unity migration | Negate Y of all positions and direction vectors |

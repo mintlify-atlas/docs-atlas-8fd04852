@@ -1,0 +1,171 @@
+---
+title: 'UI'
+description: 'Render 2D images and text on top of the 3D scene using UIBox and UIText.'
+keywords: ['ui', 'hud', 'uibox', 'uitext', 'text', 'overlay', 'bitmap font', '2d']
+---
+
+VainEngine provides two classes for on-screen UI: `UIBox` for textured or colored quads, and `UIText` for bitmap text. Both render after the 3D scene and ignore the depth buffer, so UI always appears on top of geometry.
+
+<Note>
+UI elements are drawn in `RenderUI()`, which runs after the main scene pass. They are not affected by the depth test or any 3D lighting.
+</Note>
+
+## Coordinate system
+
+UI positions use normalized screen coordinates:
+
+- `(0, 0)` is the center of the screen.
+- X ranges from `-1` (left edge) to `+1` (right edge).
+- Y ranges from `-1` (bottom edge) to `+1` (top edge).
+
+The exact range is scaled by internal `ScaleX`/`ScaleY` constants, but treat the range as `-1` to `1` for standard layouts.
+
+## UIBox
+
+`UIBox` renders a textured or tinted rectangle on screen.
+
+### Creating a UIBox
+
+```csharp
+UIBox box = new UIBox(
+    scaleX: 0.5f,
+    scaleY: 0.2f,
+    Texture.LoadFromFile(@"Resources\panel.png")
+);
+box.position = new Vector2(-0.8f, 0.9f);
+box.color    = Color4.White;
+```
+
+The constructor automatically adds the box to the internal `UIBox.boxes` list so it is rendered each frame.
+
+### Constructor parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `scaleX` | `float` | Half-width of the box in normalized screen coordinates. |
+| `scaleY` | `float` | Half-height of the box in normalized screen coordinates. |
+| `t` | `Texture` | Texture displayed on the box surface. |
+
+### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `position` | `Vector2` | — | Screen position in normalized coordinates. |
+| `scale` | `Vector2` | set by constructor | Current size. Can be changed at runtime (call `RebuildMesh` after). |
+| `color` | `Color4` | `Color4.White` | Tint multiplied with the texture. Use white for no tint. |
+
+### Updating position or scale
+
+After changing `position` or `scale`, call `RebuildMesh()` to apply the changes:
+
+```csharp
+box.position = new Vector2(0.0f, 0.0f);
+box.scale    = new Vector2(1.0f, 0.5f);
+box.RebuildMesh();
+```
+
+<Warning>
+`RebuildMesh` regenerates the vertex buffer. Call it only when the position or scale actually changes, not every frame, to avoid unnecessary GPU uploads.
+</Warning>
+
+### Removing a UIBox
+
+```csharp
+box.Destroy();
+```
+
+`Destroy` removes the box from `UIBox.boxes` so it stops rendering.
+
+### Manual draw
+
+In most cases the engine calls `Draw` for all boxes automatically. If you manage your own render loop:
+
+```csharp
+box.Draw();
+```
+
+## UIText
+
+`UIText` renders a string using a bitmap font atlas stored at `Resources\TextAtlas.png`.
+
+### Creating UIText
+
+```csharp
+UIText label = new UIText();
+label.SetText("Score: 0");
+label.position = new Vector2(-0.9f, 0.85f);
+label.size     = 1.2f;
+label.color    = Color4.White;
+```
+
+The constructor registers the text in `UIText.texts` and creates its shader automatically.
+
+### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `position` | `Vector2` | — | Screen position in normalized coordinates. |
+| `color` | `Color4` | `Color4.White` | Text color. |
+| `size` | `float` | `1` | Scale multiplier for the rendered glyphs. |
+| `text` | `string` | `""` | Current string (read-only; use `SetText` to change). |
+
+### Updating text
+
+```csharp
+label.SetText($"Score: {score}");
+```
+
+`SetText` stores the new string and rebuilds the internal mesh. Call it whenever the displayed text changes.
+
+<Tip>
+Calling `SetText` every frame with the same string is harmless but wasteful. Cache the previous value and only call `SetText` when the content actually changes.
+</Tip>
+
+### Removing UIText
+
+```csharp
+label.Destroy();
+```
+
+`Destroy` removes the instance from `UIText.texts`.
+
+### Manual draw
+
+```csharp
+label.Draw();
+```
+
+## Rendering order
+
+All `UIBox` and `UIText` instances are drawn in `RenderUI()` after the 3D scene is complete. Within `RenderUI()`, boxes are drawn first and text second, in the order they were added to their respective lists.
+
+## Example: HUD layout
+
+```csharp
+// Health bar background
+UIBox healthBg = new UIBox(0.3f, 0.03f, Texture.LoadFromFile(@"Resources\bar_bg.png"));
+healthBg.position = new Vector2(-0.65f, -0.9f);
+
+// Health bar fill (updated each frame via scale + RebuildMesh)
+UIBox healthFill = new UIBox(0.3f, 0.03f, Texture.LoadFromFile(@"Resources\bar_fill.png"));
+healthFill.position = new Vector2(-0.65f, -0.9f);
+healthFill.color    = new Color4(0.2f, 0.8f, 0.2f, 1.0f);
+
+// Score label
+UIText scoreText = new UIText();
+scoreText.SetText("Score: 0");
+scoreText.position = new Vector2(0.6f, 0.9f);
+scoreText.size     = 1.0f;
+
+// Update health bar width each frame
+float healthPct = currentHealth / maxHealth;
+healthFill.scale = new Vector2(0.3f * healthPct, 0.03f);
+healthFill.RebuildMesh();
+
+// Update score text when score changes
+if (score != previousScore)
+{
+    scoreText.SetText($"Score: {score}");
+    previousScore = score;
+}
+```

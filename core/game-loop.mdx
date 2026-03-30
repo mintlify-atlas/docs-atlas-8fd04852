@@ -1,0 +1,185 @@
+---
+title: 'Game loop'
+description: 'How VainEngine initializes, updates, and shuts down each frame, and how to control timing and input from GameLogic.'
+---
+
+VainEngine's game loop is driven by OpenTK's `GameWindow`. Your game code lives in a class that extends `GameLogic`, which the `Window` calls at the right point in each phase.
+
+## Lifecycle overview
+
+```
+OnLoad → gameLogic.Start()
+           │
+           ▼
+OnUpdateFrame (each frame)
+  ├── Component.Start()   (once, on first appearance)
+  ├── Component.Update()  (every frame)
+  └── gameLogic.Update()  (every frame)
+           │
+           ▼
+OnClosing → Component.End() (all components)
+```
+
+<Steps>
+  <Step title="Initialization — Start()">
+    `Window.OnLoad` runs once when the window opens. It calls `gameLogic.Start()`, where you set up the scene, spawn objects, and configure the camera.
+
+    ```csharp
+    public class MyGame : GameLogic
+    {
+        public override void Start()
+        {
+            // load scenes, spawn objects, configure camera
+        }
+    }
+    ```
+  </Step>
+  <Step title="Per-frame update — Update()">
+    `Window.OnUpdateFrame` fires every frame. After processing all component updates, it calls `gameLogic.Update()`. Put gameplay logic, input handling, and state changes here.
+
+    ```csharp
+    public override void Update()
+    {
+        // runs every frame after all component updates
+    }
+    ```
+  </Step>
+  <Step title="Shutdown — End()">
+    When the window closes, `OnClosing` calls `End()` on every component attached to every `GameObject`. There is no corresponding `End()` on `GameLogic` itself — clean up through components or native C# finalizers.
+  </Step>
+</Steps>
+
+## Wiring up your GameLogic
+
+Pass your `GameLogic` subclass to the window before running:
+
+```csharp
+Window window = Window.Create(1280, 720, "My Game");
+window.Setup(new MyGame());
+window.Run();
+```
+
+## Timing
+
+VainEngine exposes three timing values on `GameLogic`:
+
+| Property | Type | Description |
+|---|---|---|
+| `frameTime` | `float` | Delta time for the current frame, scaled by `timeScale`. Use this for smooth per-frame movement. |
+| `time` | `float` | Total elapsed time in seconds (unscaled). |
+| `Global.totalTime` | `double` | Total elapsed time tracked globally (unscaled). |
+
+`frameTime` is computed as:
+
+```
+frameTime = rawDelta * Window.timeScale
+```
+
+<Tip>
+Use `frameTime` (not a raw constant) when moving objects or applying forces so motion stays consistent across different frame rates.
+</Tip>
+
+### timeScale
+
+`Window.timeScale` is a static `float` that multiplies the raw frame delta before it is handed to `frameTime`. Its default value is `0.8f`.
+
+```csharp
+// slow motion
+Window.timeScale = 0.3f;
+
+// full speed
+Window.timeScale = 1.0f;
+```
+
+<Warning>
+`timeScale` affects `frameTime` and therefore physics step speed. Setting it to `0` will pause physics and any logic that relies on `frameTime`, but `time` continues to advance.
+</Warning>
+
+## Input
+
+`GameLogic` holds OpenTK input snapshots that are refreshed each frame:
+
+```csharp
+public MouseState mouse;
+public KeyboardState keyboard;
+```
+
+### Keyboard
+
+```csharp
+public override void Update()
+{
+    if (keyboard.IsKeyDown(Keys.W))
+    {
+        // move forward
+    }
+
+    if (keyboard.IsKeyPressed(Keys.Space))
+    {
+        // jump — fires once per key-down event
+    }
+}
+```
+
+### Mouse
+
+```csharp
+public override void Update()
+{
+    float mouseX = mouse.X;
+    float mouseY = mouse.Y;
+    float scrollDelta = mouse.ScrollDelta.Y;
+
+    if (mouse.IsButtonDown(MouseButton.Left))
+    {
+        // fire
+    }
+}
+```
+
+<Note>
+`mouse` and `keyboard` are OpenTK `MouseState` and `KeyboardState` snapshots. They are read-only references; you cannot write back to them.
+</Note>
+
+## Window size
+
+The current window dimensions are available via `GameLogic.Size`:
+
+```csharp
+public override void Update()
+{
+    float aspect = (float)Size.X / Size.Y;
+}
+```
+
+## Full GameLogic reference
+
+```csharp
+public class GameLogic
+{
+    public bool STARTED = false;      // true after Start() has been called
+    public Vector2i Size;             // current window size in pixels
+    public MouseState mouse;          // current mouse snapshot
+    public KeyboardState keyboard;    // current keyboard snapshot
+    public float time;                // total elapsed time (seconds)
+    public float frameTime;           // frame delta * timeScale
+    public virtual void Update() { }
+    public virtual void Start()  { }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Why does STARTED exist?">
+    `STARTED` is set to `true` by `Window` after `gameLogic.Start()` returns. You can read it from components or other systems to guard code that must not run before initialization is complete.
+  </Accordion>
+  <Accordion title="Global ambient and sky color">
+    `Global.SkyColor(Color4 c)` sets both the clear color and the `Global.ambient` property. Call it from `Start()` or any time you want to change the sky.
+
+    ```csharp
+    Global.SkyColor(new Color4(135, 206, 235, 255));
+    ```
+  </Accordion>
+  <Accordion title="Fog constants">
+    `Window.FogStart` (80) and `Window.FogEnd` (100) are compile-time constants that define the linear fog range. They are not configurable at runtime.
+  </Accordion>
+</AccordionGroup>

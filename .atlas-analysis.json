@@ -1,0 +1,125 @@
+{
+  "projectType": "framework",
+  "projectName": "VainEngine",
+  "projectDescription": "A C# 3D game engine built on OpenTK and OpenGL, providing a GameObject-Component architecture, physics, audio, UI, and scene management for small to medium games.",
+  "theme": "aspen",
+  "primaryColor": "#5B2D8E",
+  "lightColor": "#8A4FBF",
+  "darkColor": "#3A1A6E",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "project-setup"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core/game-loop",
+              "core/gameobjects",
+              "core/components",
+              "core/scene-management"
+            ]
+          },
+          {
+            "group": "Rendering",
+            "pages": [
+              "rendering/camera",
+              "rendering/meshes-and-textures",
+              "rendering/lighting",
+              "rendering/ui"
+            ]
+          },
+          {
+            "group": "Physics & Gameplay",
+            "pages": [
+              "gameplay/physics-colliders",
+              "gameplay/fps-controller",
+              "gameplay/particles",
+              "gameplay/audio"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/vmath",
+              "reference/graphics-utilities",
+              "reference/coordinate-system"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "GameObject-Component architecture (similar to Unity)",
+    "OpenGL-based 3D rendering via OpenTK with perspective and orthographic cameras",
+    "Jitter physics engine integration with colliders and rigid bodies",
+    "Built-in FPS controller with wall-running and crouching",
+    "Point light system with per-mesh emission and fog support",
+    "OBJ mesh loading with texture, normal, and emission map support",
+    "Audio playback engine via NAudio with sound caching",
+    "Scene management with JSON-based scene files and hot-reloading",
+    "UI system with textured boxes and bitmap text rendering",
+    "Particle system with configurable lifetime, gravity, and jitter",
+    "VR split-screen rendering support",
+    "Debug line drawing utilities"
+  ],
+  "publicApiSurface": [
+    "Window.Create(int width, int height, string title)",
+    "Window.Setup(GameLogic instance)",
+    "Window.Run()",
+    "GameLogic.Start()",
+    "GameLogic.Update()",
+    "GameObject()",
+    "GameObject(string tag)",
+    "GameObject.FindWithTag(string tag)",
+    "GameObject.Destroy()",
+    "GameObject.AddComponent(Component c)",
+    "GameObject.GetComponent<T>()",
+    "GameObject.RemoveComponent<T>()",
+    "GameObject.Primitives.Plane()",
+    "GameObject.Primitives.Box()",
+    "GameObject.Primitives.Sphere()",
+    "GameObject.Primitives.Capsule()",
+    "Component.Start()",
+    "Component.Update()",
+    "Component.End()",
+    "Camera.pos",
+    "Camera.euler",
+    "Camera.fov",
+    "Camera.orthographic",
+    "Camera.orthographicScale",
+    "Camera.nearClip / farClip",
+    "Mesh(string path, Texture texture)",
+    "Mesh.SetTexture(Texture t)",
+    "Mesh.SetMap(DataMapType m, Texture t)",
+    "Texture.LoadFromFile(string path)",
+    "Light(Vector3 position, Color4 color, float specular, float power, float distance)",
+    "Light.Destroy()",
+    "Collider(Shape s, GameObject connectedBody)",
+    "Collider.Destroy()",
+    "FPSController(float height)",
+    "FPSController.Movement(KeyboardState, MouseState, float frameTime)",
+    "FPSController.DoPhysics(float frameTime)",
+    "ParticleSystem.Start(Vector3 pos, Vector3 dir)",
+    "ParticleSystem.Update(float frameTime)",
+    "AudioPlaybackEngine.Instance.PlaySound(string fileName)",
+    "AudioPlaybackEngine.Instance.PlaySound(AudioClip sound)",
+    "SceneManager.LoadScene(Scene scene)",
+    "SceneManager.Reload()",
+    "UIBox(float scaleX, float scaleY, Texture t)",
+    "UIText.SetText(string s)",
+    "Graphics.DrawLine(Vector3 start, Vector3 end, Color4 color)",
+    "Global.SkyColor(Color4 c)",
+    "VMath.Lerp(float a, float b, float t)",
+    "VMath.Clamp(float value, float min, float max)"
+  ]
+}
